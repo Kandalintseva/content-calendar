@@ -1,0 +1,19 @@
+{
+  "name": "content-calendar",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.81.1"
+  },
+  "devDependencies": {
+    "vite": "7.3.8",
+    "vitest": "4.1.12"
+  }
+}
