@@ -53,6 +53,7 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .weekdays { background: #faf9f4; border-bottom: 1px solid var(--line); }
 .weekday { padding: 11px 6px; text-align: center; color: var(--muted); font-size: 12px; font-weight: 750; text-transform: uppercase; letter-spacing: .06em; }
 .day { min-height: 125px; padding: 9px; border: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: transparent; text-align: left; cursor: pointer; overflow: hidden; }
+.day { position: relative; }
 .day:nth-child(7n) { border-right: 0; }
 .day:nth-last-child(-n+7) { border-bottom: 0; }
 .day:hover, .day:focus-visible { background: #f3f7f5; outline: none; }
@@ -77,6 +78,18 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .published .post-status { color: var(--green); }
 .overdue .post-status { color: var(--red); }
 .more { color: var(--muted); font-size: 11px; text-align: center; }
+.day-hover-preview { position: absolute; left: 8px; right: 8px; top: 42px; z-index: 8; display: none; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); box-shadow: 0 12px 28px rgba(25,49,44,.18); }
+.day-hover-preview span { display: block; overflow: hidden; margin: 3px 0; white-space: nowrap; text-overflow: ellipsis; color: var(--ink); font-size: 10px; font-weight: 700; }
+.day:hover { overflow: visible; z-index: 7; }
+.day:hover .day-hover-preview { display: block; }
+.day-overview-list { display: grid; gap: 9px; margin-bottom: 16px; }
+.overview-post { width: 100%; display: grid; grid-template-columns: 48px minmax(0, 1fr) 18px; align-items: center; gap: 9px; padding: 11px; border: 0; border-left: 4px solid #98a39f; border-radius: 13px; background: #eef0ec; text-align: left; cursor: pointer; }
+.overview-post.approval-pending { border-left-color: var(--orange); background: #fff0e4; }
+.overview-post.approval-approved { border-left-color: #4f8fc2; background: #e9f2fa; }
+.overview-post.approval-published { border-left-color: var(--green); background: var(--green-soft); }
+.overview-post.approval-needs_changes { border-left-color: var(--red); background: #fae7e4; }
+.overview-post strong { display: block; overflow-wrap: anywhere; font-size: 13px; }
+.overview-post small { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; font-weight: 700; }
 .status-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; padding: 9px 20px; border-bottom: 1px solid var(--line); background: #fffefa; color: var(--muted); font-size: 11px; font-weight: 700; }
 .status-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .status-dot { width: 9px; height: 9px; border-radius: 50%; background: #98a39f; }
@@ -193,6 +206,7 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
   .weekday { font-size: 10px; padding: 9px 2px; }
   .calendar-grid { grid-template-rows: repeat(6, minmax(86px, auto)); }
   .day { min-height: 86px; padding: 5px 3px; }
+  .day-hover-preview { display: none !important; }
   .day-number { width: 27px; height: 27px; font-size: 12px; }
   .posts { gap: 3px; margin-top: 3px; }
   .post-card { padding: 4px 3px; border-left-width: 3px; grid-template-columns: 25px minmax(0, 1fr) 8px; gap: 2px; }

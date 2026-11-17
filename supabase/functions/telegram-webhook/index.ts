@@ -18,6 +18,54 @@ type TelegramUpdate = {
 };
 
 const appUrl = Deno.env.get('PUBLIC_APP_URL') || 'https://kandalintseva.github.io/content-calendar/';
+const monthNames: Record<string, number> = { января: 1, февраля: 2, марта: 3, апреля: 4, мая: 5, июня: 6, июля: 7, августа: 8, сентября: 9, октября: 10, ноября: 11, декабря: 12 };
+
+function moscowToday() {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  return { year: Number(parts.find((part) => part.type === 'year')?.value), month: Number(parts.find((part) => part.type === 'month')?.value), day: Number(parts.find((part) => part.type === 'day')?.value) };
+}
+
+function parseSchedule(text: string) {
+  const numeric = text.match(/(^|\s)(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?\s+(\d{1,2}):(\d{2})(?=\s|$)/i);
+  const named = text.match(/(^|\s)(\d{1,2})\s+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)\s+(\d{1,2}):(\d{2})(?=\s|$)/i);
+  const today = moscowToday();
+  let day: number; let month: number; let year = today.year; let hour: number; let minute: number; let match: RegExpMatchArray | null = null;
+  if (numeric) { match = numeric; day = Number(numeric[2]); month = Number(numeric[3]); year = numeric[4] ? Number(numeric[4].length === 2 ? `20${numeric[4]}` : numeric[4]) : year; hour = Number(numeric[5]); minute = Number(numeric[6]); }
+  else if (named) { match = named; day = Number(named[2]); month = monthNames[named[3].toLowerCase()]; hour = Number(named[4]); minute = Number(named[5]); }
+  else return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59) return null;
+  const value = new Date(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00+03:00`);
+  if (Number.isNaN(value.getTime())) return null;
+  return { iso: value.toISOString(), rest: text.slice((match?.index || 0) + match![0].length).trim() };
+}
+
+function titleFromBody(body: string) {
+  return (body.split('\n').map((line) => line.trim()).find(Boolean) || 'Новая публикация').slice(0, 160);
+}
+
+async function createPostFromTelegram(admin: ReturnType<typeof adminClient>, userId: string, body: string, scheduledAt: string, chatId: string) {
+  const { data: destination } = await admin.from('content_destinations').select('id').eq('user_id', userId).eq('is_default', true).maybeSingle();
+  const { data: post, error } = await admin.from('posts').insert({ user_id: userId, title: titleFromBody(body), content: body.trim(), scheduled_at: scheduledAt, destination_id: destination?.id || null, status: 'planned', approval_status: 'draft' }).select('id,title,scheduled_at').single();
+  if (error) throw error;
+  await admin.from('telegram_inbox_drafts').delete().eq('user_id', userId);
+  const when = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Europe/Moscow', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }).format(new Date(scheduledAt));
+  await sendTelegram(chatId, `✅ Добавила в календарь\n\n${post.title}\n${when} (МСК)\n\nТеперь можно открыть публикацию и отправить её на согласование.`, { inline_keyboard: [[{ text: '📅 Открыть в календаре', url: `${appUrl}?post=${post.id}` }]] });
+}
+
+async function handleIncomingPost(admin: ReturnType<typeof adminClient>, userId: string, chatId: string, text: string) {
+  const cleaned = text.replace(/^\/(?:post|добавить)\s*/i, '').trim();
+  const schedule = parseSchedule(cleaned);
+  const { data: draft } = await admin.from('telegram_inbox_drafts').select('body,scheduled_at').eq('user_id', userId).maybeSingle();
+  if (schedule && schedule.rest) return createPostFromTelegram(admin, userId, schedule.rest, schedule.iso, chatId);
+  if (draft?.body && schedule) return createPostFromTelegram(admin, userId, draft.body, schedule.iso, chatId);
+  if (draft?.scheduled_at && !schedule) return createPostFromTelegram(admin, userId, cleaned, draft.scheduled_at, chatId);
+  if (schedule) {
+    await admin.from('telegram_inbox_drafts').upsert({ user_id: userId, body: null, scheduled_at: schedule.iso, updated_at: new Date().toISOString() });
+    return sendTelegram(chatId, 'Дата и время записаны. Теперь пришлите текст поста одним сообщением.');
+  }
+  await admin.from('telegram_inbox_drafts').upsert({ user_id: userId, body: cleaned, scheduled_at: null, updated_at: new Date().toISOString() });
+  return sendTelegram(chatId, 'Текст получила. Напишите дату и время, например: 21.11 12:00');
+}
 
 async function handleCallback(update: TelegramUpdate) {
   const callback = update.callback_query;
@@ -80,6 +128,18 @@ Deno.serve(async (req) => {
       await sendTelegram(String(message.chat.id), '🎨 Стикер сохранён. Теперь откройте публикацию в календаре и выберите его в поле «Стикер для Telegram».');
     }
     return json({ ok: true }, 200, false);
+  }
+  if (message?.text && message.chat.type === 'private') {
+    const admin = adminClient();
+    const { data: settings } = await admin.from('notification_settings').select('user_id').eq('telegram_chat_id', String(message.chat.id)).eq('telegram_connected', true).maybeSingle();
+    if (settings?.user_id && !/^\/start\b/i.test(message.text)) {
+      await handleIncomingPost(admin, settings.user_id, String(message.chat.id), message.text);
+      return json({ ok: true }, 200, false);
+    }
+    if (settings?.user_id && /^\/start\b/i.test(message.text)) {
+      await sendTelegram(String(message.chat.id), 'Готово! Пришлите мне текст поста. Дату и время можно написать в том же сообщении, например: 21.11 12:00');
+      return json({ ok: true }, 200, false);
+    }
   }
   if (!message?.text || message.chat.type !== 'private') return json({ ok: true }, 200, false);
 
