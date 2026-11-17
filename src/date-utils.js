@@ -8,6 +8,25 @@ export function addMonths(date, amount) {
   return new Date(date.getFullYear(), date.getMonth() + amount, 1);
 }
 
+export function addDays(date, amount) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + amount);
+  return result;
+}
+
+export function startOfWeek(date) {
+  const result = new Date(date);
+  const mondayIndex = (result.getDay() + 6) % 7;
+  result.setDate(result.getDate() - mondayIndex);
+  result.setHours(0, 0, 0, 0);
+  return result;
+}
+
+export function weekDays(date) {
+  const monday = startOfWeek(date);
+  return Array.from({ length: 7 }, (_, index) => addDays(monday, index));
+}
+
 export function calendarDays(month) {
   const first = startOfMonth(month);
   const mondayIndex = (first.getDay() + 6) % 7;
@@ -40,6 +59,15 @@ export function isoFromLocal(value) {
 export function monthTitle(date) {
   const value = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(date);
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+export function weekTitle(date) {
+  const days = weekDays(date);
+  const first = days[0];
+  const last = days[6];
+  const firstText = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: first.getMonth() === last.getMonth() ? undefined : 'short' }).format(first);
+  const lastText = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }).format(last);
+  return `${firstText} — ${lastText}`;
 }
 
 export function formatTime(iso) {

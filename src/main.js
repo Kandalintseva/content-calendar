@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import './styles.css';
 import { config, isConfigured } from './config.js';
-import { addMonths, calendarDays, dateKey, defaultDateTime, formatLongDate, formatTime, isoFromLocal, localInputValue, monthTitle } from './date-utils.js';
+import { addDays, addMonths, calendarDays, dateKey, defaultDateTime, formatLongDate, formatTime, isoFromLocal, localInputValue, monthTitle, startOfWeek, weekDays, weekTitle } from './date-utils.js';
 
 const app = document.querySelector('#app');
 const supabase = isConfigured() ? createClient(config.supabaseUrl, config.supabaseKey, {
@@ -11,6 +11,8 @@ const supabase = isConfigured() ? createClient(config.supabaseUrl, config.supaba
 const state = {
   session: null,
   month: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+  week: startOfWeek(new Date()),
+  view: localStorage.getItem('calendar-view') === 'week' ? 'week' : 'month',
   posts: [],
   destinations: [],
   settings: null,
@@ -161,38 +163,61 @@ function renderApp() {
     return map;
   }, new Map());
 
+  const isWeek = state.view === 'week';
   app.innerHTML = `<div class="shell"><main class="app">
     <header class="topbar">
-      <div class="brand"><div class="brand-mark">◫</div><div><h1>Календарь публикаций</h1><p>Нажмите на день, чтобы добавить публикацию</p></div></div>
+      <div class="brand"><div class="brand-mark">◫</div><div><h1>Календарь публикаций</h1><p>${isWeek ? 'Нажмите на свободное время, чтобы добавить публикацию' : 'Нажмите на день, чтобы добавить публикацию'}</p></div></div>
       <button class="icon-button" id="settings" aria-label="Настройки" title="Настройки">⚙</button>
     </header>
     <section class="calendar-card" aria-label="Календарь">
       <div class="calendar-head">
-        <div class="month-nav">
-          <button class="icon-button" id="prev-month" aria-label="Предыдущий месяц">‹</button>
-          <div class="month-title">${monthTitle(state.month)}</div>
-          <button class="icon-button" id="next-month" aria-label="Следующий месяц">›</button>
+        <div class="period-nav">
+          <button class="icon-button" id="prev-period" aria-label="${isWeek ? 'Предыдущая неделя' : 'Предыдущий месяц'}">‹</button>
+          <div class="month-title">${isWeek ? weekTitle(state.week) : monthTitle(state.month)}</div>
+          <button class="icon-button" id="next-period" aria-label="${isWeek ? 'Следующая неделя' : 'Следующий месяц'}">›</button>
         </div>
-        <button class="today-button" id="today">Сегодня</button>
+        <div class="calendar-actions"><div class="view-switch" aria-label="Вид календаря"><button class="${isWeek ? '' : 'active'}" data-view="month">Месяц</button><button class="${isWeek ? 'active' : ''}" data-view="week">Неделя</button></div><button class="today-button" id="today">Сегодня</button></div>
       </div>
-      <div class="weekdays">${['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map((day) => `<div class="weekday">${day}</div>`).join('')}</div>
-      <div class="calendar-grid">${days.map((day) => renderDay(day, grouped.get(dateKey(day)) || [], today)).join('')}</div>
+      ${isWeek ? renderWeek(grouped, today) : `<div class="weekdays">${['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map((day) => `<div class="weekday">${day}</div>`).join('')}</div><div class="calendar-grid">${days.map((day) => renderDay(day, grouped.get(dateKey(day)) || [], today)).join('')}</div>`}
     </section>
   </main><button class="fab" id="add" aria-label="Добавить публикацию" title="Добавить публикацию">+</button></div>`;
 
-  document.querySelector('#prev-month').onclick = () => changeMonth(-1);
-  document.querySelector('#next-month').onclick = () => changeMonth(1);
-  document.querySelector('#today').onclick = () => { state.month = new Date(new Date().getFullYear(), new Date().getMonth(), 1); loadData(); };
+  document.querySelector('#prev-period').onclick = () => changePeriod(-1);
+  document.querySelector('#next-period').onclick = () => changePeriod(1);
+  document.querySelector('#today').onclick = () => { const now = new Date(); state.month = new Date(now.getFullYear(), now.getMonth(), 1); state.week = startOfWeek(now); loadData(); };
+  document.querySelectorAll('[data-view]').forEach((button) => button.onclick = () => changeView(button.dataset.view));
   document.querySelector('#settings').onclick = openSettings;
   document.querySelector('#add').onclick = () => openEditor(null, new Date());
   document.querySelectorAll('.day').forEach((el) => el.onclick = (event) => {
     if (event.target.closest('.post-card')) return;
     openEditor(null, new Date(`${el.dataset.date}T12:00:00`));
   });
+  document.querySelectorAll('.week-slot').forEach((el) => el.onclick = (event) => {
+    if (event.target.closest('.post-card')) return;
+    openEditor(null, new Date(`${el.dataset.date}T${String(el.dataset.hour).padStart(2, '0')}:00:00`));
+  });
   document.querySelectorAll('.post-card').forEach((el) => el.onclick = (event) => {
     event.stopPropagation();
     openEditor(state.posts.find((post) => post.id === el.dataset.id));
   });
+}
+
+function renderWeek(grouped, today) {
+  const days = weekDays(state.week);
+  const hours = Array.from({ length: 15 }, (_, index) => index + 8);
+  const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+  return `<div class="week-scroll"><div class="week-schedule">
+    <div class="week-corner">Время</div>
+    ${days.map((day, index) => `<div class="week-day-head ${dateKey(day) === today ? 'today' : ''}"><span>${dayNames[index]}</span><strong>${day.getDate()}</strong></div>`).join('')}
+    ${hours.map((hour) => `<div class="week-hour">${String(hour).padStart(2, '0')}:00</div>${days.map((day) => {
+      const posts = (grouped.get(dateKey(day)) || []).filter((post) => new Date(post.scheduled_at).getHours() === hour);
+      return `<div class="week-slot ${dateKey(day) === today ? 'today' : ''}" data-date="${dateKey(day)}" data-hour="${hour}" role="button" tabindex="0" aria-label="Добавить публикацию ${day.toLocaleDateString('ru-RU')} в ${hour}:00">${posts.map(renderWeekPost).join('')}</div>`;
+    }).join('')}`).join('')}
+  </div></div>`;
+}
+
+function renderWeekPost(post) {
+  return `<button class="post-card week-post ${postStatus(post)}" data-id="${post.id}" type="button"><span class="post-time">${formatTime(post.scheduled_at)}</span><span class="post-title">${escapeHtml(post.title)}</span><span class="post-status">${postStatus(post) === 'published' ? '✓' : postStatus(post) === 'overdue' ? '!' : '•'}</span></button>`;
 }
 
 function renderDay(day, posts, today) {
@@ -211,6 +236,27 @@ function renderDay(day, posts, today) {
 async function changeMonth(amount) {
   state.month = addMonths(state.month, amount);
   await loadData();
+}
+
+async function changePeriod(amount) {
+  if (state.view === 'week') {
+    state.week = addDays(state.week, amount * 7);
+    state.month = new Date(state.week.getFullYear(), state.week.getMonth(), 1);
+    await loadData();
+  } else {
+    await changeMonth(amount);
+  }
+}
+
+function changeView(view) {
+  state.view = view;
+  localStorage.setItem('calendar-view', view);
+  if (view === 'week') {
+    const now = new Date();
+    const monthIsCurrent = state.month.getFullYear() === now.getFullYear() && state.month.getMonth() === now.getMonth();
+    state.week = startOfWeek(monthIsCurrent ? now : state.month);
+  }
+  renderApp();
 }
 
 function openEditor(post = null, day = new Date()) {
