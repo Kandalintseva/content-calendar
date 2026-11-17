@@ -13,6 +13,7 @@ const state = {
   month: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   week: startOfWeek(new Date()),
   view: localStorage.getItem('calendar-view') === 'week' ? 'week' : 'month',
+  filterDestination: localStorage.getItem('calendar-destination') || '',
   posts: [],
   destinations: [],
   subtopics: [],
@@ -165,7 +166,8 @@ async function maybeOpenLinkedPost() {
 function renderApp() {
   const days = calendarDays(state.month);
   const today = dateKey(new Date());
-  const grouped = Map.groupBy ? Map.groupBy(state.posts, (post) => dateKey(new Date(post.scheduled_at))) : state.posts.reduce((map, post) => {
+  const visiblePosts = state.filterDestination ? state.posts.filter((post) => post.destination_id === state.filterDestination) : state.posts;
+  const grouped = Map.groupBy ? Map.groupBy(visiblePosts, (post) => dateKey(new Date(post.scheduled_at))) : visiblePosts.reduce((map, post) => {
     const key = dateKey(new Date(post.scheduled_at));
     map.set(key, [...(map.get(key) || []), post]);
     return map;
@@ -184,7 +186,7 @@ function renderApp() {
           <div class="month-title">${isWeek ? weekTitle(state.week) : monthTitle(state.month)}</div>
           <button class="icon-button" id="next-period" aria-label="${isWeek ? 'Следующая неделя' : 'Следующий месяц'}">›</button>
         </div>
-        <div class="calendar-actions"><div class="view-switch" aria-label="Вид календаря"><button class="${isWeek ? '' : 'active'}" data-view="month">Месяц</button><button class="${isWeek ? 'active' : ''}" data-view="week">Неделя</button></div><button class="today-button" id="today">Сегодня</button></div>
+        <div class="calendar-actions"><label class="destination-filter"><span>Для:</span><select id="destination-filter"><option value="">Все каналы и чаты</option>${state.destinations.map((item) => `<option value="${item.id}" ${item.id === state.filterDestination ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}</select></label><div class="view-switch" aria-label="Вид календаря"><button class="${isWeek ? '' : 'active'}" data-view="month">Месяц</button><button class="${isWeek ? 'active' : ''}" data-view="week">Неделя</button></div><button class="today-button" id="today">Сегодня</button></div>
       </div>
       <div class="status-legend" aria-label="Статусы публикаций"><span><i class="status-dot draft"></i>Черновик</span><span><i class="status-dot pending"></i>На согласовании</span><span><i class="status-dot approved"></i>Согласовано</span><span><i class="status-dot published"></i>Опубликовано</span><span><i class="status-dot needs_changes"></i>Нужно изменить</span></div>
       ${isWeek ? renderWeek(grouped, today) : `<div class="weekdays">${['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map((day) => `<div class="weekday">${day}</div>`).join('')}</div><div class="calendar-grid">${days.map((day) => renderDay(day, grouped.get(dateKey(day)) || [], today)).join('')}</div>`}
@@ -195,6 +197,7 @@ function renderApp() {
   document.querySelector('#next-period').onclick = () => changePeriod(1);
   document.querySelector('#today').onclick = () => { const now = new Date(); state.month = new Date(now.getFullYear(), now.getMonth(), 1); state.week = startOfWeek(now); loadData(); };
   document.querySelectorAll('[data-view]').forEach((button) => button.onclick = () => changeView(button.dataset.view));
+  document.querySelector('#destination-filter').onchange = (event) => { state.filterDestination = event.target.value; localStorage.setItem('calendar-destination', state.filterDestination); renderApp(); };
   document.querySelector('#settings').onclick = openSettings;
   document.querySelector('#add').onclick = () => openEditor(null, new Date());
   document.querySelectorAll('.day').forEach((el) => el.onclick = (event) => {
@@ -226,7 +229,12 @@ function renderWeek(grouped, today) {
 }
 
 function renderWeekPost(post) {
-  return `<button class="post-card week-post ${postStatus(post)} approval-${approvalStatus(post)}" data-id="${post.id}" type="button"><span class="post-time">${formatTime(post.scheduled_at)}</span><span class="post-title">${escapeHtml(post.title)}<small class="post-stage">${approvalLabel(post)}</small></span><span class="post-status">${postStatus(post) === 'published' ? '✓' : postStatus(post) === 'overdue' ? '!' : '•'}</span></button>`;
+  return `<button class="post-card week-post ${postStatus(post)} approval-${approvalStatus(post)}" data-id="${post.id}" type="button"><span class="post-time">${formatTime(post.scheduled_at)}</span><span class="post-title">${escapeHtml(post.title)}${postSubtopic(post)}<small class="post-stage">${approvalLabel(post)}</small></span><span class="post-status">${postStatus(post) === 'published' ? '✓' : postStatus(post) === 'overdue' ? '!' : '•'}</span></button>`;
+}
+
+function postSubtopic(post) {
+  const topic = state.subtopics.find((item) => item.id === post.subtopic_id);
+  return topic ? `<small class="post-subtopic">${escapeHtml(topic.name)}</small>` : '';
 }
 
 function renderDay(day, posts, today) {
@@ -236,7 +244,7 @@ function renderDay(day, posts, today) {
     <span class="day-number">${day.getDate()}</span>
     <span class="posts">${posts.slice(0, 3).map((post) => `<span class="post-card ${postStatus(post)} approval-${approvalStatus(post)}" data-id="${post.id}">
       <span class="post-time">${formatTime(post.scheduled_at)}</span>
-      <span class="post-title">${escapeHtml(post.title)}<small class="post-stage">${approvalLabel(post)}</small></span>
+      <span class="post-title">${escapeHtml(post.title)}${postSubtopic(post)}<small class="post-stage">${approvalLabel(post)}</small></span>
       <span class="post-status" aria-label="${postStatus(post) === 'published' ? 'Опубликовано' : postStatus(post) === 'overdue' ? 'Просрочено' : 'Запланировано'}">${postStatus(post) === 'published' ? '✓' : postStatus(post) === 'overdue' ? '!' : '•'}</span>
     </span>`).join('')}${posts.length > 3 ? `<span class="more">ещё ${posts.length - 3}</span>` : ''}</span>
   </button>`;

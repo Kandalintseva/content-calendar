@@ -36,6 +36,8 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .period-nav { display: flex; align-items: center; gap: 8px; }
 .month-title { min-width: 190px; text-align: center; font-size: 20px; font-weight: 750; }
 .calendar-actions { display: flex; align-items: center; gap: 10px; }
+.destination-filter { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; font-weight: 750; }
+.destination-filter select { max-width: 250px; min-height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 12px; background: white; color: var(--ink); font: inherit; }
 .view-switch { display: flex; padding: 4px; border-radius: 14px; background: #edf0ec; }
 .view-switch button { min-height: 38px; padding: 0 13px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-weight: 750; cursor: pointer; }
 .view-switch button.active { background: white; color: var(--green); box-shadow: 0 2px 8px rgba(25,49,44,.1); }
@@ -70,6 +72,7 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .post-time { font-size: 11px; font-weight: 800; opacity: .75; }
 .post-title { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; font-size: 12px; font-weight: 700; }
 .post-stage { display: block; margin-top: 2px; color: var(--muted); font-size: 9px; font-weight: 700; line-height: 1.15; }
+.post-subtopic { display: block; margin-top: 3px; color: var(--green); font-size: 9px; font-weight: 750; line-height: 1.15; }
 .post-status { display: grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; font-size: 10px; font-weight: 900; color: var(--orange); }
 .published .post-status { color: var(--green); }
 .overdue .post-status { color: var(--red); }
@@ -179,6 +182,8 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
   .period-nav { width: 100%; justify-content: space-between; }
   .month-title { min-width: 140px; font-size: 17px; }
   .calendar-actions { width: 100%; justify-content: space-between; }
+  .destination-filter { width: 100%; order: -1; }
+  .destination-filter select { flex: 1; max-width: none; }
   .view-switch { flex: 1; }
   .view-switch button { flex: 1; }
   .today-button { padding: 0 12px; }
