@@ -26,6 +26,8 @@ const state = {
 
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
 const postStatus = (post) => post.status === 'published' ? 'published' : new Date(post.scheduled_at) < new Date() ? 'overdue' : 'planned';
+const approvalStatus = (post) => post.status === 'published' ? 'published' : post.approval_status || 'draft';
+const approvalLabel = (post) => ({ draft: 'Черновик', pending: 'На согласовании', approved: 'Согласовано', needs_changes: 'Нужно изменить', published: 'Опубликовано' }[approvalStatus(post)] || 'Черновик');
 
 function toast(message, type = '') {
   document.querySelector('.toast')?.remove();
@@ -184,6 +186,7 @@ function renderApp() {
         </div>
         <div class="calendar-actions"><div class="view-switch" aria-label="Вид календаря"><button class="${isWeek ? '' : 'active'}" data-view="month">Месяц</button><button class="${isWeek ? 'active' : ''}" data-view="week">Неделя</button></div><button class="today-button" id="today">Сегодня</button></div>
       </div>
+      <div class="status-legend" aria-label="Статусы публикаций"><span><i class="status-dot draft"></i>Черновик</span><span><i class="status-dot pending"></i>На согласовании</span><span><i class="status-dot approved"></i>Согласовано</span><span><i class="status-dot published"></i>Опубликовано</span><span><i class="status-dot needs_changes"></i>Нужно изменить</span></div>
       ${isWeek ? renderWeek(grouped, today) : `<div class="weekdays">${['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map((day) => `<div class="weekday">${day}</div>`).join('')}</div><div class="calendar-grid">${days.map((day) => renderDay(day, grouped.get(dateKey(day)) || [], today)).join('')}</div>`}
     </section>
   </main><button class="fab" id="add" aria-label="Добавить публикацию" title="Добавить публикацию">+</button></div>`;
@@ -223,7 +226,7 @@ function renderWeek(grouped, today) {
 }
 
 function renderWeekPost(post) {
-  return `<button class="post-card week-post ${postStatus(post)}" data-id="${post.id}" type="button"><span class="post-time">${formatTime(post.scheduled_at)}</span><span class="post-title">${escapeHtml(post.title)}</span><span class="post-status">${postStatus(post) === 'published' ? '✓' : postStatus(post) === 'overdue' ? '!' : '•'}</span></button>`;
+  return `<button class="post-card week-post ${postStatus(post)} approval-${approvalStatus(post)}" data-id="${post.id}" type="button"><span class="post-time">${formatTime(post.scheduled_at)}</span><span class="post-title">${escapeHtml(post.title)}<small class="post-stage">${approvalLabel(post)}</small></span><span class="post-status">${postStatus(post) === 'published' ? '✓' : postStatus(post) === 'overdue' ? '!' : '•'}</span></button>`;
 }
 
 function renderDay(day, posts, today) {
@@ -231,9 +234,9 @@ function renderDay(day, posts, today) {
   const other = day.getMonth() !== state.month.getMonth();
   return `<button class="day ${other ? 'other' : ''} ${key === today ? 'today' : ''}" data-date="${key}" aria-label="${day.toLocaleDateString('ru-RU')}">
     <span class="day-number">${day.getDate()}</span>
-    <span class="posts">${posts.slice(0, 3).map((post) => `<span class="post-card ${postStatus(post)}" data-id="${post.id}">
+    <span class="posts">${posts.slice(0, 3).map((post) => `<span class="post-card ${postStatus(post)} approval-${approvalStatus(post)}" data-id="${post.id}">
       <span class="post-time">${formatTime(post.scheduled_at)}</span>
-      <span class="post-title">${escapeHtml(post.title)}</span>
+      <span class="post-title">${escapeHtml(post.title)}<small class="post-stage">${approvalLabel(post)}</small></span>
       <span class="post-status" aria-label="${postStatus(post) === 'published' ? 'Опубликовано' : postStatus(post) === 'overdue' ? 'Просрочено' : 'Запланировано'}">${postStatus(post) === 'published' ? '✓' : postStatus(post) === 'overdue' ? '!' : '•'}</span>
     </span>`).join('')}${posts.length > 3 ? `<span class="more">ещё ${posts.length - 3}</span>` : ''}</span>
   </button>`;

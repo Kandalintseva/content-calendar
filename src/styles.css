@@ -62,12 +62,25 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .post-card { width: 100%; min-width: 0; padding: 7px 8px; border: 0; border-left: 4px solid var(--orange); border-radius: 9px; background: #fff0e4; text-align: left; cursor: pointer; display: grid; grid-template-columns: 40px minmax(0, 1fr) 14px; align-items: center; gap: 6px; }
 .post-card.published { border-left-color: var(--green); background: var(--green-soft); }
 .post-card.overdue { border-left-color: var(--red); background: #fae7e4; }
+.post-card.approval-draft { border-left-color: #98a39f; background: #eef0ec; }
+.post-card.approval-pending { border-left-color: var(--orange); background: #fff0e4; }
+.post-card.approval-approved { border-left-color: #4f8fc2; background: #e9f2fa; }
+.post-card.approval-needs_changes { border-left-color: var(--red); background: #fae7e4; }
+.post-card.approval-published { border-left-color: var(--green); background: var(--green-soft); }
 .post-time { font-size: 11px; font-weight: 800; opacity: .75; }
 .post-title { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; font-size: 12px; font-weight: 700; }
+.post-stage { display: block; margin-top: 2px; color: var(--muted); font-size: 9px; font-weight: 700; line-height: 1.15; }
 .post-status { display: grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; font-size: 10px; font-weight: 900; color: var(--orange); }
 .published .post-status { color: var(--green); }
 .overdue .post-status { color: var(--red); }
 .more { color: var(--muted); font-size: 11px; text-align: center; }
+.status-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; padding: 9px 20px; border-bottom: 1px solid var(--line); background: #fffefa; color: var(--muted); font-size: 11px; font-weight: 700; }
+.status-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.status-dot { width: 9px; height: 9px; border-radius: 50%; background: #98a39f; }
+.status-dot.pending { background: var(--orange); }
+.status-dot.approved { background: #4f8fc2; }
+.status-dot.published { background: var(--green); }
+.status-dot.needs_changes { background: var(--red); }
 
 .week-scroll { width: 100%; overflow: auto; overscroll-behavior: contain; }
 .week-schedule { min-width: 980px; display: grid; grid-template-columns: 70px repeat(7, minmax(130px, 1fr)); background: white; }
@@ -177,6 +190,7 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
   .post-card { padding: 4px 3px; border-left-width: 3px; grid-template-columns: 25px minmax(0, 1fr) 8px; gap: 2px; }
   .post-time { font-size: 9px; }
   .post-title { font-size: 10px; }
+  .post-stage { font-size: 8px; }
   .post-status { width: 8px; height: 8px; font-size: 8px; }
   .week-schedule { min-width: 820px; grid-template-columns: 58px repeat(7, minmax(108px, 1fr)); }
   .week-corner, .week-day-head { min-height: 62px; }
