@@ -12,10 +12,12 @@ const state = {
   session: null,
   month: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   posts: [],
+  destinations: [],
   settings: null,
   modal: null,
   toastTimer: null,
   saveTimer: null,
+  linkedPostHandled: false,
 };
 
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
@@ -116,14 +118,38 @@ function humanError(error) {
 async function loadData() {
   const from = new Date(state.month.getFullYear(), state.month.getMonth() - 1, 1).toISOString();
   const to = new Date(state.month.getFullYear(), state.month.getMonth() + 2, 1).toISOString();
-  const [postsResult, settingsResult] = await Promise.all([
+  const [postsResult, settingsResult, destinationsResult] = await Promise.all([
     supabase.from('posts').select('*').gte('scheduled_at', from).lt('scheduled_at', to).order('scheduled_at'),
     supabase.from('notification_settings').select('*').maybeSingle(),
+    supabase.from('content_destinations').select('*').order('is_default', { ascending: false }).order('created_at'),
   ]);
   if (postsResult.error) toast(humanError(postsResult.error), 'error');
   state.posts = postsResult.data || [];
   state.settings = settingsResult.data || null;
+  state.destinations = destinationsResult.data || [];
   renderApp();
+  await maybeOpenLinkedPost();
+}
+
+async function maybeOpenLinkedPost() {
+  if (state.linkedPostHandled) return;
+  const postId = new URLSearchParams(window.location.search).get('post');
+  if (!postId) return;
+  const existing = state.posts.find((post) => post.id === postId);
+  if (existing) {
+    state.linkedPostHandled = true;
+    window.history.replaceState({}, '', window.location.pathname);
+    openEditor(existing);
+    return;
+  }
+  const { data } = await supabase.from('posts').select('*').eq('id', postId).maybeSingle();
+  if (!data) {
+    state.linkedPostHandled = true;
+    return;
+  }
+  const date = new Date(data.scheduled_at);
+  state.month = new Date(date.getFullYear(), date.getMonth(), 1);
+  await loadData();
 }
 
 function renderApp() {
@@ -189,16 +215,19 @@ async function changeMonth(amount) {
 
 function openEditor(post = null, day = new Date()) {
   const isNew = !post;
-  const value = post || { title: '', content: '', scheduled_at: new Date(defaultDateTime(day)).toISOString(), status: 'planned' };
+  const value = post || { title: '', content: '', scheduled_at: new Date(defaultDateTime(day)).toISOString(), status: 'planned', destination_id: state.destinations.find((item) => item.is_default)?.id || state.destinations[0]?.id || '' };
+  const approvalLabels = { draft: 'Черновик', pending: 'Отправлено на согласование', approved: 'Согласовано', needs_changes: 'Нужно изменить' };
   state.modal = { type: 'editor', id: post?.id || null };
   showModal(`<div class="modal-head"><div><h2>${isNew ? 'Новая публикация' : 'Публикация'}</h2><small>${formatLongDate(value.scheduled_at)}</small></div><button class="icon-button close" aria-label="Закрыть">×</button></div>
     <form class="modal-body" id="post-form">
       <div class="field"><label for="title">Название</label><input id="title" name="title" value="${escapeHtml(value.title)}" required maxlength="160" autofocus placeholder="О чём публикация?"></div>
       <div class="field"><label for="scheduled_at">Дата и время</label><input id="scheduled_at" name="scheduled_at" type="datetime-local" value="${localInputValue(value.scheduled_at)}" required></div>
+      <div class="field"><label for="destination_id">Проект или чат</label><select id="destination_id" name="destination_id" required>${state.destinations.map((item) => `<option value="${item.id}" ${item.id === value.destination_id ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}</select></div>
       <div class="field"><label for="content">Текст и заметки</label><textarea id="content" name="content" placeholder="Текст публикации, идея или ссылка…">${escapeHtml(value.content || '')}</textarea></div>
+      ${isNew ? '' : `<div class="approval-state ${value.approval_status || 'draft'}" id="approval-state">${approvalLabels[value.approval_status] || approvalLabels.draft}</div>`}
       <label class="toggle-row"><span><strong>Уже опубликовано</strong><small>Напоминания больше не придут</small></span><span class="switch"><input name="published" type="checkbox" ${value.status === 'published' ? 'checked' : ''}><span></span></span></label>
       <div class="autosave" id="autosave">${isNew ? '' : 'Все изменения сохраняются автоматически'}</div>
-      <div class="actions">${isNew ? '' : '<button class="button danger" type="button" id="delete-post">Удалить</button>'}<button class="button secondary close" type="button">Закрыть</button>${isNew ? '<button class="button primary" type="submit">Добавить</button>' : ''}</div>
+      <div class="actions">${isNew ? '' : '<button class="button danger" type="button" id="delete-post">Удалить</button><button class="button telegram" type="button" id="send-review">Отправить на согласование</button>'}<button class="button secondary close" type="button">Закрыть</button>${isNew ? '<button class="button primary" type="submit">Добавить</button>' : ''}</div>
     </form>`);
   document.querySelector('.modal')?.classList.add('editor-modal');
   const form = document.querySelector('#post-form');
@@ -207,6 +236,7 @@ function openEditor(post = null, day = new Date()) {
     form.oninput = () => scheduleAutoSave(form, post.id);
     form.onchange = () => scheduleAutoSave(form, post.id, 100);
     document.querySelector('#delete-post').onclick = () => deletePost(post.id);
+    document.querySelector('#send-review').onclick = () => sendForReview(form, post.id);
   }
   setTimeout(() => document.querySelector('#title')?.focus(), 80);
 }
@@ -214,6 +244,11 @@ function openEditor(post = null, day = new Date()) {
 function scheduleAutoSave(form, id, delay = 650) {
   clearTimeout(state.saveTimer);
   const label = document.querySelector('#autosave');
+  const approval = document.querySelector('#approval-state');
+  if (approval && !approval.classList.contains('draft')) {
+    approval.className = 'approval-state draft';
+    approval.textContent = 'Черновик — отправьте на согласование ещё раз';
+  }
   if (label) label.textContent = 'Сохраняем…';
   state.saveTimer = setTimeout(() => savePost(form, id, false), delay);
 }
@@ -224,14 +259,16 @@ async function savePost(form, id, closeAfter) {
     user_id: state.session.user.id,
     title: form.title.value.trim(),
     content: form.content.value.trim(),
+    destination_id: form.destination_id.value || null,
     scheduled_at: isoFromLocal(form.scheduled_at.value),
     status: form.published.checked ? 'published' : 'planned',
     published_at: form.published.checked ? new Date().toISOString() : null,
+    ...(id ? { approval_status: 'draft', approved_at: null } : {}),
   };
   const result = id
     ? await supabase.from('posts').update(payload).eq('id', id).select().single()
     : await supabase.from('posts').insert(payload).select().single();
-  if (result.error) return toast(humanError(result.error), 'error');
+  if (result.error) { toast(humanError(result.error), 'error'); return null; }
   if (closeAfter) closeModal();
   else {
     const label = document.querySelector('#autosave');
@@ -239,6 +276,24 @@ async function savePost(form, id, closeAfter) {
   }
   await loadData();
   if (closeAfter) toast('Публикация добавлена');
+  return result.data;
+}
+
+async function sendForReview(form, postId) {
+  clearTimeout(state.saveTimer);
+  const button = document.querySelector('#send-review');
+  button.disabled = true;
+  button.textContent = 'Отправляем…';
+  const saved = await savePost(form, postId, false);
+  if (!saved) { button.disabled = false; button.textContent = 'Отправить на согласование'; return; }
+  const { data, error } = await supabase.functions.invoke('telegram-review', { body: { postId } });
+  button.disabled = false;
+  button.textContent = 'Отправить ещё раз';
+  if (error || !data?.ok) return toast(data?.error || humanError(error), 'error');
+  form.title.value = data.title;
+  const status = document.querySelector('#approval-state');
+  if (status) { status.className = 'approval-state pending'; status.textContent = 'Отправлено на согласование'; }
+  toast('Пост отправлен вам в Telegram');
 }
 
 async function deletePost(id) {
@@ -294,14 +349,43 @@ function renderSettings() {
         ${toggle('daily_digest_enabled', 'План на сегодня в 09:00', 'Короткая утренняя сводка', s.daily_digest_enabled)}
         ${toggle('overdue_enabled', 'Если публикация пропущена', 'Напомним один раз после назначенного времени', s.overdue_enabled)}
       </section>
+      <section class="settings-section"><h3>Проекты и чаты</h3><p>Выбирайте, куда предназначена каждая публикация.</p>
+        <div class="destination-list">${state.destinations.map((item) => `<div class="destination-item"><span>${escapeHtml(item.name)}${item.is_default ? '<small>Основной</small>' : ''}</span>${item.is_default ? '' : `<button class="icon-delete" type="button" data-delete-destination="${item.id}" aria-label="Удалить">×</button>`}</div>`).join('')}</div>
+        <form class="destination-form" id="destination-form"><input name="name" maxlength="180" required placeholder="Название проекта, мероприятия или чата"><button class="button secondary" type="submit">Добавить</button></form>
+      </section>
       <section class="settings-section"><h3>Доступ</h3><p>${escapeHtml(state.session.user.email)}</p><button class="button secondary" id="change-password">Сменить пароль</button> <button class="link-button" id="sign-out">Выйти</button></section>
     </div>`);
   document.querySelectorAll('[data-setting]').forEach((input) => input.onchange = () => updateSetting(input.dataset.setting, input.checked));
   document.querySelector('#connect-telegram')?.addEventListener('click', connectTelegram);
   document.querySelector('#test-telegram')?.addEventListener('click', testTelegram);
   document.querySelector('#disconnect-telegram')?.addEventListener('click', disconnectTelegram);
+  document.querySelector('#destination-form').onsubmit = addDestination;
+  document.querySelectorAll('[data-delete-destination]').forEach((button) => button.onclick = () => deleteDestination(button.dataset.deleteDestination));
   document.querySelector('#change-password').onclick = openPasswordChange;
   document.querySelector('#sign-out').onclick = async () => { closeModal(); await supabase.auth.signOut(); };
+}
+
+async function addDestination(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const name = form.name.value.trim();
+  if (!name) return;
+  const { data, error } = await supabase.from('content_destinations').insert({ user_id: state.session.user.id, name }).select().single();
+  if (error) return toast(error.code === '23505' ? 'Такой проект или чат уже есть' : humanError(error), 'error');
+  state.destinations.push(data);
+  closeModal();
+  renderSettings();
+  toast('Проект или чат добавлен');
+}
+
+async function deleteDestination(id) {
+  if (!confirm('Удалить этот проект или чат из списка? Публикации сохранятся.')) return;
+  const { error } = await supabase.from('content_destinations').delete().eq('id', id);
+  if (error) return toast(humanError(error), 'error');
+  state.destinations = state.destinations.filter((item) => item.id !== id);
+  closeModal();
+  renderSettings();
+  toast('Удалено из списка');
 }
 
 function openPasswordChange() {

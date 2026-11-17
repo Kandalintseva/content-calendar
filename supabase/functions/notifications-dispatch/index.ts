@@ -1,7 +1,7 @@
 import { adminClient } from '../_shared/supabase.ts';
 import { json } from '../_shared/http.ts';
 import { sendTelegram } from '../_shared/telegram.ts';
-import { formatMoscowDateKey, hourReminderBounds, isDailyDigestWindow, moscowDayBounds, overdueBounds } from '../_shared/schedule.ts';
+import { formatMoscowDateKey, hourReminderBounds, isDailyDigestWindow, moscowDayBounds, overdueBounds, scheduledPostBounds } from '../_shared/schedule.ts';
 
 type Settings = {
   user_id: string;
@@ -10,8 +10,8 @@ type Settings = {
   daily_digest_enabled: boolean;
   overdue_enabled: boolean;
 };
-type Post = { id: string; user_id: string; title: string; scheduled_at: string };
-type Kind = 'hour_before' | 'daily_digest' | 'overdue';
+type Post = { id: string; user_id: string; title: string; content: string; scheduled_at: string; approval_status: string; content_destinations?: { name?: string } | null };
+type Kind = 'hour_before' | 'daily_digest' | 'overdue' | 'scheduled_post';
 
 const admin = adminClient();
 const moscowTime = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' });
@@ -41,7 +41,7 @@ async function deliver(settings: Settings, kind: Kind, dedupeKey: string, text: 
 }
 
 async function postsBetween(userId: string, start: Date | string, end: Date | string, plannedOnly = false) {
-  let query = admin.from('posts').select('id,user_id,title,scheduled_at').eq('user_id', userId)
+  let query = admin.from('posts').select('id,user_id,title,content,scheduled_at,approval_status,content_destinations(name)').eq('user_id', userId)
     .gte('scheduled_at', typeof start === 'string' ? start : start.toISOString())
     .lte('scheduled_at', typeof end === 'string' ? end : end.toISOString()).order('scheduled_at');
   if (plannedOnly) query = query.eq('status', 'planned');
@@ -72,6 +72,14 @@ Deno.serve(async (req) => {
         for (const post of posts) {
           track(await deliver(settings, 'hour_before', `hour:${post.id}`, `⏰ Через час публикация\n\n${post.title}\nВремя: ${moscowTime.format(new Date(post.scheduled_at))}`, post.id));
         }
+      }
+
+      const due = scheduledPostBounds(now);
+      const readyPosts = await postsBetween(settings.user_id, due.start, due.end, true);
+      for (const post of readyPosts.filter((item) => item.approval_status === 'approved')) {
+        const destination = post.content_destinations?.name || 'Чат не выбран';
+        const text = `📨 Пора публиковать\n\n${post.title}\n\n${post.content || ''}\n\n📍 ${destination}\n\nСкопируйте или перешлите это сообщение в нужный чат.`;
+        track(await deliver(settings, 'scheduled_post', `scheduled:${post.id}`, text, post.id));
       }
 
       if (settings.daily_digest_enabled && isDailyDigestWindow(now)) {

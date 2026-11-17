@@ -1,6 +1,6 @@
 import { adminClient } from '../_shared/supabase.ts';
 import { json } from '../_shared/http.ts';
-import { sendTelegram, sha256 } from '../_shared/telegram.ts';
+import { sendTelegram, sha256, telegramRequest } from '../_shared/telegram.ts';
 
 type TelegramUpdate = {
   message?: {
@@ -8,7 +8,53 @@ type TelegramUpdate = {
     chat: { id: number; type: string };
     from?: { username?: string };
   };
+  callback_query?: {
+    id: string;
+    data?: string;
+    from: { id: number };
+    message?: { message_id: number; chat: { id: number; type: string } };
+  };
 };
+
+const appUrl = Deno.env.get('PUBLIC_APP_URL') || 'https://kandalintseva.github.io/content-calendar/';
+
+async function handleCallback(update: TelegramUpdate) {
+  const callback = update.callback_query;
+  if (!callback?.data || !callback.message || callback.message.chat.type !== 'private') return;
+  const match = callback.data.match(/^(approve|changes):([a-f0-9-]{36})$/i);
+  if (!match) return;
+  const admin = adminClient();
+  const chatId = String(callback.message.chat.id);
+  const { data: settings } = await admin.from('notification_settings')
+    .select('user_id').eq('telegram_chat_id', chatId).eq('telegram_connected', true).maybeSingle();
+  if (!settings?.user_id) {
+    await telegramRequest('answerCallbackQuery', { callback_query_id: callback.id, text: 'Сначала подключите Telegram заново', show_alert: true });
+    return;
+  }
+  const approved = match[1] === 'approve';
+  const { data: post } = await admin.from('posts').update({
+    approval_status: approved ? 'approved' : 'needs_changes',
+    approved_at: approved ? new Date().toISOString() : null,
+  }).eq('id', match[2]).eq('user_id', settings.user_id).select('title').maybeSingle();
+  if (!post) {
+    await telegramRequest('answerCallbackQuery', { callback_query_id: callback.id, text: 'Публикация не найдена', show_alert: true });
+    return;
+  }
+  await telegramRequest('answerCallbackQuery', {
+    callback_query_id: callback.id,
+    text: approved ? 'Пост согласован' : 'Отмечено: нужно изменить',
+  });
+  await telegramRequest('editMessageReplyMarkup', {
+    chat_id: chatId,
+    message_id: callback.message.message_id,
+    reply_markup: { inline_keyboard: [[{ text: approved ? '✅ Согласовано' : '✏️ Нужно изменить', url: `${appUrl}?post=${match[2]}` }]] },
+  });
+  await sendTelegram(chatId, approved
+    ? `✅ «${post.title}» согласован. В назначенное время я пришлю полный текст, чтобы его можно было переслать в чат.`
+    : `✏️ «${post.title}» возвращён на доработку. Откройте публикацию в календаре, внесите изменения и отправьте на согласование ещё раз.`, {
+      inline_keyboard: [[{ text: '📅 Открыть публикацию', url: `${appUrl}?post=${match[2]}` }]],
+    });
+}
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ ok: false }, 405, false);
@@ -18,6 +64,10 @@ Deno.serve(async (req) => {
 
   let update: TelegramUpdate;
   try { update = await req.json(); } catch { return json({ ok: true }, 200, false); }
+  if (update.callback_query) {
+    await handleCallback(update);
+    return json({ ok: true }, 200, false);
+  }
   const message = update.message;
   if (!message?.text || message.chat.type !== 'private') return json({ ok: true }, 200, false);
 

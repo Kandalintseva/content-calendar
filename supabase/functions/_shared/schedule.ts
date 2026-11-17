@@ -48,3 +48,10 @@ export function overdueBounds(date: Date) {
     end: new Date(date.getTime() - 10 * 60_000),
   };
 }
+
+export function scheduledPostBounds(date: Date) {
+  return {
+    start: new Date(date.getTime() - 5 * 60_000),
+    end: new Date(date.getTime() + 5 * 60_000),
+  };
+}
