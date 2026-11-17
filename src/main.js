@@ -136,7 +136,9 @@ function renderDay(day, posts, today) {
   return `<button class="day ${other ? 'other' : ''} ${key === today ? 'today' : ''}" data-date="${key}" aria-label="${day.toLocaleDateString('ru-RU')}">
     <span class="day-number">${day.getDate()}</span>
     <span class="posts">${posts.slice(0, 3).map((post) => `<span class="post-card ${postStatus(post)}" data-id="${post.id}">
-      <span class="post-time">${formatTime(post.scheduled_at)}</span><span class="post-title">${escapeHtml(post.title)}</span>
+      <span class="post-time">${formatTime(post.scheduled_at)}</span>
+      <span class="post-title">${escapeHtml(post.title)}</span>
+      <span class="post-status" aria-label="${postStatus(post) === 'published' ? 'Опубликовано' : postStatus(post) === 'overdue' ? 'Просрочено' : 'Запланировано'}">${postStatus(post) === 'published' ? '✓' : postStatus(post) === 'overdue' ? '!' : '•'}</span>
     </span>`).join('')}${posts.length > 3 ? `<span class="more">ещё ${posts.length - 3}</span>` : ''}</span>
   </button>`;
 }
