@@ -1,6 +1,7 @@
 import { adminClient } from '../_shared/supabase.ts';
 import { json } from '../_shared/http.ts';
 import { sendSticker, sendTelegram } from '../_shared/telegram.ts';
+import { sendPostAttachments } from '../_shared/attachments.ts';
 import { formatMoscowDateKey, hourReminderBounds, isDailyDigestWindow, moscowDayBounds, overdueBounds, scheduledPostBounds } from '../_shared/schedule.ts';
 
 type Settings = {
@@ -82,6 +83,7 @@ Deno.serve(async (req) => {
         const delivery = await deliver(settings, 'scheduled_post', `scheduled:${post.id}`, text, post.id);
         track(delivery);
         if (delivery === 'sent' && post.telegram_stickers?.file_id) await sendSticker(settings.telegram_chat_id, post.telegram_stickers.file_id);
+        if (delivery === 'sent') await sendPostAttachments(settings.telegram_chat_id, post.id);
       }
 
       if (settings.daily_digest_enabled && isDailyDigestWindow(now)) {

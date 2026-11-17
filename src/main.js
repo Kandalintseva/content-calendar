@@ -18,6 +18,7 @@ const state = {
   destinations: [],
   subtopics: [],
   stickers: [],
+  attachments: [],
   settings: null,
   modal: null,
   toastTimer: null,
@@ -125,12 +126,13 @@ function humanError(error) {
 async function loadData() {
   const from = new Date(state.month.getFullYear(), state.month.getMonth() - 1, 1).toISOString();
   const to = new Date(state.month.getFullYear(), state.month.getMonth() + 2, 1).toISOString();
-  const [postsResult, settingsResult, destinationsResult, subtopicsResult, stickersResult] = await Promise.all([
+  const [postsResult, settingsResult, destinationsResult, subtopicsResult, stickersResult, attachmentsResult] = await Promise.all([
     supabase.from('posts').select('*').gte('scheduled_at', from).lt('scheduled_at', to).order('scheduled_at'),
     supabase.from('notification_settings').select('*').maybeSingle(),
     supabase.from('content_destinations').select('*').order('is_default', { ascending: false }).order('created_at'),
     supabase.from('content_subtopics').select('*').order('created_at'),
     supabase.from('telegram_stickers').select('*').order('created_at', { ascending: false }),
+    supabase.from('post_attachments').select('*').order('created_at'),
   ]);
   if (postsResult.error) toast(humanError(postsResult.error), 'error');
   state.posts = postsResult.data || [];
@@ -138,6 +140,7 @@ async function loadData() {
   state.destinations = destinationsResult.data || [];
   state.subtopics = subtopicsResult.data || [];
   state.stickers = stickersResult.data || [];
+  state.attachments = attachmentsResult.data || [];
   renderApp();
   await maybeOpenLinkedPost();
 }
@@ -290,6 +293,7 @@ function openEditor(post = null, day = new Date()) {
       <div class="field"><label for="subtopic_id">Подтема</label><select id="subtopic_id" name="subtopic_id"><option value="">Без подтемы</option>${subtopics.map((item) => `<option value="${item.id}" ${item.id === value.subtopic_id ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}</select><small class="field-hint">Добавить свои подтемы можно в настройках.</small></div>
       <div class="field"><label for="sticker_id">Стикер для Telegram</label><select id="sticker_id" name="sticker_id"><option value="">Без стикера</option>${state.stickers.map((item) => `<option value="${item.id}" ${item.id === value.sticker_id ? 'selected' : ''}>${escapeHtml(item.emoji || '🎨')} ${escapeHtml(item.set_name || 'Мой стикер')}</option>`).join('')}</select><small class="field-hint">Отправьте стикер вашему боту, чтобы он появился здесь.</small></div>
       <div class="field"><label for="content">Текст и заметки</label><textarea id="content" name="content" placeholder="Текст публикации, идея или ссылка…">${escapeHtml(value.content || '')}</textarea></div>
+      <div class="field"><label for="attachments">Картинки, видео и файлы</label><input id="attachments" name="files" type="file" multiple accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip"><small class="field-hint">Можно выбрать несколько файлов, до 50 МБ каждый.</small><div class="attachment-list" id="attachment-list">${renderAttachmentList(post?.id)}</div></div>
       ${isNew ? '' : `<div class="approval-state ${value.approval_status || 'draft'}" id="approval-state">${approvalLabels[value.approval_status] || approvalLabels.draft}</div>`}
       <label class="toggle-row"><span><strong>Уже опубликовано</strong><small>Напоминания больше не придут</small></span><span class="switch"><input name="published" type="checkbox" ${value.status === 'published' ? 'checked' : ''}><span></span></span></label>
       <div class="autosave" id="autosave">${isNew ? '' : 'Все изменения сохраняются автоматически'}</div>
@@ -304,8 +308,14 @@ function openEditor(post = null, day = new Date()) {
     form.onchange = () => scheduleAutoSave(form, post.id, 100);
     document.querySelector('#delete-post').onclick = () => deletePost(post.id);
     document.querySelector('#send-review').onclick = () => sendForReview(form, post.id);
+    document.querySelectorAll('[data-delete-attachment]').forEach((button) => button.onclick = () => deleteAttachment(button.dataset.deleteAttachment));
   }
   setTimeout(() => document.querySelector('#title')?.focus(), 80);
+}
+
+function renderAttachmentList(postId) {
+  if (!postId) return '';
+  return state.attachments.filter((item) => item.post_id === postId).map((item) => `<div class="attachment-item"><span>${item.mime_type.startsWith('image/') ? '🖼️' : item.mime_type.startsWith('video/') ? '🎬' : '📎'} ${escapeHtml(item.file_name)}</span><button type="button" class="attachment-remove" data-delete-attachment="${item.id}" aria-label="Удалить файл">×</button></div>`).join('') || '<span class="field-hint">Вложений пока нет</span>';
 }
 
 function updateSubtopicOptions(form, selectedId = '') {
@@ -343,6 +353,7 @@ async function savePost(form, id, closeAfter) {
     ? await supabase.from('posts').update(payload).eq('id', id).select().single()
     : await supabase.from('posts').insert(payload).select().single();
   if (result.error) { toast(humanError(result.error), 'error'); return null; }
+  await uploadSelectedFiles(form, result.data.id);
   if (closeAfter) closeModal();
   else {
     const label = document.querySelector('#autosave');
@@ -351,6 +362,44 @@ async function savePost(form, id, closeAfter) {
   await loadData();
   if (closeAfter) toast('Публикация добавлена');
   return result.data;
+}
+
+async function uploadSelectedFiles(form, postId) {
+  const input = form.querySelector('#attachments');
+  const files = [...(input?.files || [])];
+  if (!files.length) return true;
+  for (const file of files) {
+    if (file.size > 50 * 1024 * 1024) {
+      toast(`Файл «${file.name}» больше 50 МБ`, 'error');
+      continue;
+    }
+    const safeName = file.name.replace(/[^\wа-яА-ЯёЁ.() -]/g, '_');
+    const storagePath = `${state.session.user.id}/${postId}/${crypto.randomUUID()}-${safeName}`;
+    const { error: uploadError } = await supabase.storage.from('post-attachments').upload(storagePath, file, { contentType: file.type || 'application/octet-stream', upsert: false });
+    if (uploadError) { toast(`Не удалось загрузить «${file.name}»`, 'error'); continue; }
+    const { data, error } = await supabase.from('post_attachments').insert({ post_id: postId, user_id: state.session.user.id, storage_path: storagePath, file_name: file.name, mime_type: file.type || 'application/octet-stream', size_bytes: file.size }).select().single();
+    if (error) { await supabase.storage.from('post-attachments').remove([storagePath]); toast(`Не удалось сохранить «${file.name}»`, 'error'); continue; }
+    state.attachments.push(data);
+  }
+  input.value = '';
+  const list = form.querySelector('#attachment-list');
+  if (list) { list.innerHTML = renderAttachmentList(postId); list.querySelectorAll('[data-delete-attachment]').forEach((button) => button.onclick = () => deleteAttachment(button.dataset.deleteAttachment)); }
+  return true;
+}
+
+async function deleteAttachment(id) {
+  const item = state.attachments.find((attachment) => attachment.id === id);
+  if (!item) return;
+  const { error } = await supabase.storage.from('post-attachments').remove([item.storage_path]);
+  if (error) return toast('Не удалось удалить файл', 'error');
+  const { error: rowError } = await supabase.from('post_attachments').delete().eq('id', id);
+  if (rowError) return toast(humanError(rowError), 'error');
+  state.attachments = state.attachments.filter((attachment) => attachment.id !== id);
+  document.querySelector('#attachment-list')?.replaceChildren(...[]);
+  const postId = state.modal?.id;
+  const list = document.querySelector('#attachment-list');
+  if (list) { list.innerHTML = renderAttachmentList(postId); list.querySelectorAll('[data-delete-attachment]').forEach((button) => button.onclick = () => deleteAttachment(button.dataset.deleteAttachment)); }
+  toast('Файл удалён');
 }
 
 async function sendForReview(form, postId) {

@@ -1,6 +1,7 @@
 import { adminClient, authenticatedUser } from '../_shared/supabase.ts';
 import { json, options } from '../_shared/http.ts';
 import { sendSticker, sendTelegram } from '../_shared/telegram.ts';
+import { sendPostAttachments } from '../_shared/attachments.ts';
 
 const appUrl = Deno.env.get('PUBLIC_APP_URL') || 'https://kandalintseva.github.io/content-calendar/';
 const moscowDate = new Intl.DateTimeFormat('ru-RU', {
@@ -50,6 +51,7 @@ Deno.serve(async (req) => {
       ],
     });
     if (post.telegram_stickers?.file_id) await sendSticker(settings.telegram_chat_id, post.telegram_stickers.file_id);
+    await sendPostAttachments(settings.telegram_chat_id, post.id);
     await admin.from('posts').update({
       title, approval_status: 'pending', review_requested_at: new Date().toISOString(), approved_at: null,
     }).eq('id', post.id).eq('user_id', user.id);

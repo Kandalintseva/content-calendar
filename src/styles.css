@@ -117,6 +117,9 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .field textarea { min-height: 112px; resize: vertical; }
 .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(35, 104, 90, .1); }
 .field-hint { color: var(--muted); font-size: 12px; }
+.attachment-list { display: grid; gap: 6px; }
+.attachment-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 38px; padding: 6px 9px; border-radius: 10px; background: #f2f4ef; color: var(--ink); font-size: 12px; }
+.attachment-remove { width: 28px; height: 28px; border: 0; border-radius: 8px; background: #f8e4e1; color: var(--red); cursor: pointer; font-size: 17px; }
 .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
 .actions .danger { margin-right: auto; }
 .autosave { min-height: 20px; margin-top: -5px; color: var(--muted); font-size: 12px; text-align: right; }

@@ -25,6 +25,13 @@ export async function sendSticker(chatId: string, fileId: string) {
   return telegramRequest('sendSticker', { chat_id: chatId, sticker: fileId });
 }
 
+export async function sendMedia(chatId: string, attachment: { mime_type: string; file_name: string }, url: string) {
+  const kind = attachment.mime_type.startsWith('image/') ? 'sendPhoto'
+    : attachment.mime_type.startsWith('video/') ? 'sendVideo' : 'sendDocument';
+  const field = kind === 'sendPhoto' ? 'photo' : kind === 'sendVideo' ? 'video' : 'document';
+  return telegramRequest(kind, { chat_id: chatId, [field]: url, caption: attachment.file_name });
+}
+
 export async function sha256(value: string) {
   const bytes = new TextEncoder().encode(value);
   const hash = await crypto.subtle.digest('SHA-256', bytes);
