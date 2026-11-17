@@ -259,9 +259,33 @@ function renderDay(day, posts, today) {
 function openDayOverview(dayKey) {
   const date = new Date(`${dayKey}T12:00:00`);
   const posts = state.posts.filter((post) => dateKey(new Date(post.scheduled_at)) === dayKey).sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
-  showModal(`<div class="modal-head"><div><h2>${date.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</h2><small>${posts.length} ${posts.length === 1 ? 'публикация' : 'публикаций'}</small></div><button class="icon-button close" aria-label="Закрыть">×</button></div><div class="modal-body day-overview"><div class="day-overview-list">${posts.map((post) => `<button class="overview-post ${postStatus(post)} approval-${approvalStatus(post)}" data-overview-post="${post.id}"><span class="post-time">${formatTime(post.scheduled_at)}</span><span><strong>${escapeHtml(post.title)}</strong>${postSubtopic(post)}<small>${approvalLabel(post)}</small></span><span>›</span></button>`).join('')}</div><button class="button primary" id="add-to-day">Добавить публикацию в этот день</button></div>`);
+  showModal(`<div class="modal-head"><div><h2>${date.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</h2><small>${posts.length} ${posts.length === 1 ? 'публикация' : 'публикаций'}</small></div><button class="icon-button close" aria-label="Закрыть">×</button></div><div class="modal-body day-overview"><div class="day-overview-list">${posts.map((post) => `<button class="overview-post ${postStatus(post)} approval-${approvalStatus(post)}" data-overview-post="${post.id}"><span class="post-time">${formatTime(post.scheduled_at)}</span><span><strong>${escapeHtml(post.title)}</strong>${postSubtopic(post)}<small>${approvalLabel(post)}</small></span><span>›</span></button>`).join('')}</div><div class="day-overview-actions"><button class="button secondary" id="download-day-plan">Скачать план дня</button><button class="button primary" id="add-to-day">Добавить публикацию в этот день</button></div></div>`);
   document.querySelectorAll('[data-overview-post]').forEach((button) => button.onclick = () => { const post = state.posts.find((item) => item.id === button.dataset.overviewPost); closeModal(); openEditor(post); });
   document.querySelector('#add-to-day').onclick = () => { closeModal(); openEditor(null, date); };
+  document.querySelector('#download-day-plan').onclick = () => downloadDayPlan(dayKey, posts);
+}
+
+function downloadDayPlan(dayKey, posts) {
+  const date = new Date(`${dayKey}T12:00:00`);
+  const dateLabel = date.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const lines = [`Контент-план на ${dateLabel}`, ''];
+  if (!posts.length) lines.push('Публикаций нет.');
+  posts.forEach((post, index) => {
+    const destination = state.destinations.find((item) => item.id === post.destination_id)?.name;
+    const subtopic = state.subtopics.find((item) => item.id === post.subtopic_id)?.name;
+    lines.push(`${index + 1}. ${formatTime(post.scheduled_at)} — ${post.title}`);
+    if (destination) lines.push(`   Канал/чат: ${destination}`);
+    if (subtopic) lines.push(`   Подтема: ${subtopic}`);
+    lines.push(`   Статус: ${approvalLabel(post)}`, '');
+  });
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `контент-план-${dayKey}.txt`;
+  link.click();
+  URL.revokeObjectURL(url);
+  toast('План дня скачан');
 }
 
 async function changeMonth(amount) {

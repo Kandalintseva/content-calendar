@@ -83,6 +83,7 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .day:hover { overflow: visible; z-index: 7; }
 .day:hover .day-hover-preview { display: block; }
 .day-overview-list { display: grid; gap: 9px; margin-bottom: 16px; }
+.day-overview-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 9px; }
 .overview-post { width: 100%; display: grid; grid-template-columns: 48px minmax(0, 1fr) 18px; align-items: center; gap: 9px; padding: 11px; border: 0; border-left: 4px solid #98a39f; border-radius: 13px; background: #eef0ec; text-align: left; cursor: pointer; }
 .overview-post.approval-pending { border-left-color: var(--orange); background: #fff0e4; }
 .overview-post.approval-approved { border-left-color: #4f8fc2; background: #e9f2fa; }
@@ -230,6 +231,8 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
   .editor-modal .actions { flex-wrap: wrap; }
   .editor-modal .actions .telegram { order: -1; width: 100%; }
   .destination-form { grid-template-columns: 1fr; }
+  .day-overview-actions { flex-direction: column; }
+  .day-overview-actions .button { width: 100%; }
   .subtopic-form { grid-template-columns: 1fr; }
   .fab { right: 18px; }
 }
