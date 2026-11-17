@@ -5,6 +5,7 @@ import { sendTelegram, sha256, telegramRequest } from '../_shared/telegram.ts';
 type TelegramUpdate = {
   message?: {
     text?: string;
+    sticker?: { file_id: string; emoji?: string; set_name?: string };
     chat: { id: number; type: string };
     from?: { username?: string };
   };
@@ -69,6 +70,17 @@ Deno.serve(async (req) => {
     return json({ ok: true }, 200, false);
   }
   const message = update.message;
+  if (message?.sticker && message.chat.type === 'private') {
+    const admin = adminClient();
+    const { data: settings } = await admin.from('notification_settings').select('user_id').eq('telegram_chat_id', String(message.chat.id)).eq('telegram_connected', true).maybeSingle();
+    if (!settings?.user_id) {
+      await sendTelegram(String(message.chat.id), 'Сначала подключите Telegram в настройках календаря.');
+    } else {
+      await admin.from('telegram_stickers').upsert({ user_id: settings.user_id, file_id: message.sticker.file_id, emoji: message.sticker.emoji || null, set_name: message.sticker.set_name || null }, { onConflict: 'user_id,file_id' });
+      await sendTelegram(String(message.chat.id), '🎨 Стикер сохранён. Теперь откройте публикацию в календаре и выберите его в поле «Стикер для Telegram».');
+    }
+    return json({ ok: true }, 200, false);
+  }
   if (!message?.text || message.chat.type !== 'private') return json({ ok: true }, 200, false);
 
   const match = message.text.trim().match(/^\/start(?:\s+([a-f0-9]{48}))?$/i);

@@ -1,6 +1,6 @@
 import { adminClient, authenticatedUser } from '../_shared/supabase.ts';
 import { json, options } from '../_shared/http.ts';
-import { sendTelegram } from '../_shared/telegram.ts';
+import { sendSticker, sendTelegram } from '../_shared/telegram.ts';
 
 const appUrl = Deno.env.get('PUBLIC_APP_URL') || 'https://kandalintseva.github.io/content-calendar/';
 const moscowDate = new Intl.DateTimeFormat('ru-RU', {
@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
   const admin = adminClient();
   const [{ data: settings }, { data: post, error }] = await Promise.all([
     admin.from('notification_settings').select('telegram_chat_id,telegram_connected').eq('user_id', user.id).single(),
-    admin.from('posts').select('id,title,content,scheduled_at,destination_id,content_destinations(name)').eq('id', postId).eq('user_id', user.id).single(),
+    admin.from('posts').select('id,title,content,scheduled_at,destination_id,sticker_id,content_destinations(name),telegram_stickers(file_id,emoji)').eq('id', postId).eq('user_id', user.id).single(),
   ]);
   if (error || !post) return json({ error: 'Публикация не найдена' }, 404);
   if (!settings?.telegram_connected || !settings.telegram_chat_id) return json({ error: 'Сначала подключите Telegram в настройках' }, 409);
@@ -49,6 +49,7 @@ Deno.serve(async (req) => {
         [{ text: '📅 Открыть в календаре', url: `${appUrl}?post=${post.id}` }],
       ],
     });
+    if (post.telegram_stickers?.file_id) await sendSticker(settings.telegram_chat_id, post.telegram_stickers.file_id);
     await admin.from('posts').update({
       title, approval_status: 'pending', review_requested_at: new Date().toISOString(), approved_at: null,
     }).eq('id', post.id).eq('user_id', user.id);

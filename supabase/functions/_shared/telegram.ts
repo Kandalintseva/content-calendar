@@ -21,6 +21,10 @@ export async function sendTelegram(chatId: string, text: string, replyMarkup?: I
   });
 }
 
+export async function sendSticker(chatId: string, fileId: string) {
+  return telegramRequest('sendSticker', { chat_id: chatId, sticker: fileId });
+}
+
 export async function sha256(value: string) {
   const bytes = new TextEncoder().encode(value);
   const hash = await crypto.subtle.digest('SHA-256', bytes);

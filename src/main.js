@@ -16,6 +16,7 @@ const state = {
   posts: [],
   destinations: [],
   subtopics: [],
+  stickers: [],
   settings: null,
   modal: null,
   toastTimer: null,
@@ -121,17 +122,19 @@ function humanError(error) {
 async function loadData() {
   const from = new Date(state.month.getFullYear(), state.month.getMonth() - 1, 1).toISOString();
   const to = new Date(state.month.getFullYear(), state.month.getMonth() + 2, 1).toISOString();
-  const [postsResult, settingsResult, destinationsResult, subtopicsResult] = await Promise.all([
+  const [postsResult, settingsResult, destinationsResult, subtopicsResult, stickersResult] = await Promise.all([
     supabase.from('posts').select('*').gte('scheduled_at', from).lt('scheduled_at', to).order('scheduled_at'),
     supabase.from('notification_settings').select('*').maybeSingle(),
     supabase.from('content_destinations').select('*').order('is_default', { ascending: false }).order('created_at'),
     supabase.from('content_subtopics').select('*').order('created_at'),
+    supabase.from('telegram_stickers').select('*').order('created_at', { ascending: false }),
   ]);
   if (postsResult.error) toast(humanError(postsResult.error), 'error');
   state.posts = postsResult.data || [];
   state.settings = settingsResult.data || null;
   state.destinations = destinationsResult.data || [];
   state.subtopics = subtopicsResult.data || [];
+  state.stickers = stickersResult.data || [];
   renderApp();
   await maybeOpenLinkedPost();
 }
@@ -274,6 +277,7 @@ function openEditor(post = null, day = new Date()) {
       <div class="field"><label for="scheduled_at">Дата и время</label><input id="scheduled_at" name="scheduled_at" type="datetime-local" value="${localInputValue(value.scheduled_at)}" required></div>
       <div class="field"><label for="destination_id">Проект или чат</label><select id="destination_id" name="destination_id" required>${state.destinations.map((item) => `<option value="${item.id}" ${item.id === value.destination_id ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}</select></div>
       <div class="field"><label for="subtopic_id">Подтема</label><select id="subtopic_id" name="subtopic_id"><option value="">Без подтемы</option>${subtopics.map((item) => `<option value="${item.id}" ${item.id === value.subtopic_id ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}</select><small class="field-hint">Добавить свои подтемы можно в настройках.</small></div>
+      <div class="field"><label for="sticker_id">Стикер для Telegram</label><select id="sticker_id" name="sticker_id"><option value="">Без стикера</option>${state.stickers.map((item) => `<option value="${item.id}" ${item.id === value.sticker_id ? 'selected' : ''}>${escapeHtml(item.emoji || '🎨')} ${escapeHtml(item.set_name || 'Мой стикер')}</option>`).join('')}</select><small class="field-hint">Отправьте стикер вашему боту, чтобы он появился здесь.</small></div>
       <div class="field"><label for="content">Текст и заметки</label><textarea id="content" name="content" placeholder="Текст публикации, идея или ссылка…">${escapeHtml(value.content || '')}</textarea></div>
       ${isNew ? '' : `<div class="approval-state ${value.approval_status || 'draft'}" id="approval-state">${approvalLabels[value.approval_status] || approvalLabels.draft}</div>`}
       <label class="toggle-row"><span><strong>Уже опубликовано</strong><small>Напоминания больше не придут</small></span><span class="switch"><input name="published" type="checkbox" ${value.status === 'published' ? 'checked' : ''}><span></span></span></label>
@@ -318,6 +322,7 @@ async function savePost(form, id, closeAfter) {
     content: form.content.value.trim(),
     destination_id: form.destination_id.value || null,
     subtopic_id: form.subtopic_id.value || null,
+    sticker_id: form.sticker_id.value || null,
     scheduled_at: isoFromLocal(form.scheduled_at.value),
     status: form.published.checked ? 'published' : 'planned',
     published_at: form.published.checked ? new Date().toISOString() : null,
@@ -414,6 +419,9 @@ function renderSettings() {
       <section class="settings-section"><h3>Подтемы</h3><p>Добавьте свои рубрики для каждого проекта или чата.</p>
         <div class="subtopic-list">${state.subtopics.map((item) => `<div class="destination-item"><span>${escapeHtml(item.name)}<small>${escapeHtml(state.destinations.find((destination) => destination.id === item.destination_id)?.name || 'Проект удалён')}</small></span><button class="icon-delete" type="button" data-delete-subtopic="${item.id}" aria-label="Удалить">×</button></div>`).join('') || '<div class="empty-inline">Подтем пока нет</div>'}</div>
         <form class="subtopic-form" id="subtopic-form"><select name="destination_id" required>${state.destinations.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join('')}</select><input name="name" maxlength="120" required placeholder="Например: Новости проекта"><button class="button secondary" type="submit">Добавить подтему</button></form>
+      </section>
+      <section class="settings-section"><h3>Стикеры Telegram</h3><p>Отправьте свой стикер этому боту в личном чате. Он сохранится здесь и появится в редакторе публикации.</p>
+        <div class="sticker-list">${state.stickers.map((item) => `<div class="sticker-item"><span class="sticker-preview">${escapeHtml(item.emoji || '🎨')}</span><span>${escapeHtml(item.set_name || 'Мой стикер')}</span></div>`).join('') || '<div class="empty-inline">Стикеров пока нет</div>'}</div>
       </section>
       <section class="settings-section"><h3>Доступ</h3><p>${escapeHtml(state.session.user.email)}</p><button class="button secondary" id="change-password">Сменить пароль</button> <button class="link-button" id="sign-out">Выйти</button></section>
     </div>`);
