@@ -1,5 +1,10 @@
 project_id = "content-calendar"
 
+[auth]
+site_url = "https://kandalintseva.github.io/content-calendar/"
+additional_redirect_urls = ["https://kandalintseva.github.io/content-calendar/"]
+enable_signup = true
+
 [functions.telegram-link]
 verify_jwt = true
 
