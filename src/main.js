@@ -293,13 +293,36 @@ function renderSettings() {
         ${toggle('daily_digest_enabled', 'План на сегодня в 09:00', 'Короткая утренняя сводка', s.daily_digest_enabled)}
         ${toggle('overdue_enabled', 'Если публикация пропущена', 'Напомним один раз после назначенного времени', s.overdue_enabled)}
       </section>
-      <section class="settings-section"><h3>Доступ</h3><p>${escapeHtml(state.session.user.email)}</p><button class="button secondary" id="sign-out">Выйти</button></section>
+      <section class="settings-section"><h3>Доступ</h3><p>${escapeHtml(state.session.user.email)}</p><button class="button secondary" id="change-password">Сменить пароль</button> <button class="link-button" id="sign-out">Выйти</button></section>
     </div>`);
   document.querySelectorAll('[data-setting]').forEach((input) => input.onchange = () => updateSetting(input.dataset.setting, input.checked));
   document.querySelector('#connect-telegram')?.addEventListener('click', connectTelegram);
   document.querySelector('#test-telegram')?.addEventListener('click', testTelegram);
   document.querySelector('#disconnect-telegram')?.addEventListener('click', disconnectTelegram);
+  document.querySelector('#change-password').onclick = openPasswordChange;
   document.querySelector('#sign-out').onclick = async () => { closeModal(); await supabase.auth.signOut(); };
+}
+
+function openPasswordChange() {
+  closeModal();
+  showModal(`<div class="modal-head"><h2>Сменить пароль</h2><button class="icon-button close" aria-label="Закрыть">×</button></div>
+    <form class="modal-body" id="change-password-form">
+      <div class="field"><label for="settings-password">Новый пароль</label><input id="settings-password" name="password" type="password" autocomplete="new-password" minlength="8" required placeholder="Не менее 8 символов" autofocus></div>
+      <div class="field"><label for="settings-confirmation">Повторите пароль</label><input id="settings-confirmation" name="confirmation" type="password" autocomplete="new-password" minlength="8" required></div>
+      <div class="actions"><button class="button secondary close" type="button">Отмена</button><button class="button primary" type="submit">Сохранить пароль</button></div>
+    </form>`);
+  document.querySelector('#change-password-form').onsubmit = async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (form.password.value !== form.confirmation.value) return toast('Пароли не совпадают', 'error');
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+    const { error } = await supabase.auth.updateUser({ password: form.password.value });
+    button.disabled = false;
+    if (error) return toast(humanError(error), 'error');
+    closeModal();
+    toast('Пароль изменён');
+  };
 }
 
 function toggle(key, title, detail, checked) {
