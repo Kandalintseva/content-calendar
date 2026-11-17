@@ -63,7 +63,7 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .post-card.published { border-left-color: var(--green); background: var(--green-soft); }
 .post-card.overdue { border-left-color: var(--red); background: #fae7e4; }
 .post-time { font-size: 11px; font-weight: 800; opacity: .75; }
-.post-title { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; font-weight: 700; }
+.post-title { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; font-size: 12px; font-weight: 700; }
 .post-status { display: grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; font-size: 10px; font-weight: 900; color: var(--orange); }
 .published .post-status { color: var(--green); }
 .overdue .post-status { color: var(--red); }
@@ -81,7 +81,9 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .week-slot { min-height: 82px; padding: 6px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: white; cursor: pointer; }
 .week-slot:hover, .week-slot:focus-visible { outline: none; background: #f3f7f5; }
 .week-slot.today { background: #f7fbf9; }
-.week-slot .week-post { margin-bottom: 5px; grid-template-columns: 34px minmax(0, 1fr) 10px; padding: 7px 6px; }
+.week-slot .week-post { margin-bottom: 5px; grid-template-columns: 34px minmax(0, 1fr) 10px; align-items: start; padding: 9px 7px; }
+.week-slot .week-post .post-title { display: block; overflow: visible; -webkit-line-clamp: unset; line-height: 1.3; }
+.week-slot .week-post .post-status { margin-top: 2px; }
 
 .fab { position: fixed; right: max(22px, calc((100vw - 1180px) / 2 + 22px)); bottom: max(22px, env(safe-area-inset-bottom)); z-index: 20; width: 64px; height: 64px; border: 0; border-radius: 22px; background: var(--green); color: white; box-shadow: 0 14px 30px rgba(35, 104, 90, .32); font-size: 34px; cursor: pointer; }
 .fab:active { transform: scale(.96); }
