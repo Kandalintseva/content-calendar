@@ -15,6 +15,7 @@ const state = {
   view: localStorage.getItem('calendar-view') === 'week' ? 'week' : 'month',
   posts: [],
   destinations: [],
+  subtopics: [],
   settings: null,
   modal: null,
   toastTimer: null,
@@ -120,15 +121,17 @@ function humanError(error) {
 async function loadData() {
   const from = new Date(state.month.getFullYear(), state.month.getMonth() - 1, 1).toISOString();
   const to = new Date(state.month.getFullYear(), state.month.getMonth() + 2, 1).toISOString();
-  const [postsResult, settingsResult, destinationsResult] = await Promise.all([
+  const [postsResult, settingsResult, destinationsResult, subtopicsResult] = await Promise.all([
     supabase.from('posts').select('*').gte('scheduled_at', from).lt('scheduled_at', to).order('scheduled_at'),
     supabase.from('notification_settings').select('*').maybeSingle(),
     supabase.from('content_destinations').select('*').order('is_default', { ascending: false }).order('created_at'),
+    supabase.from('content_subtopics').select('*').order('created_at'),
   ]);
   if (postsResult.error) toast(humanError(postsResult.error), 'error');
   state.posts = postsResult.data || [];
   state.settings = settingsResult.data || null;
   state.destinations = destinationsResult.data || [];
+  state.subtopics = subtopicsResult.data || [];
   renderApp();
   await maybeOpenLinkedPost();
 }
@@ -263,12 +266,14 @@ function openEditor(post = null, day = new Date()) {
   const isNew = !post;
   const value = post || { title: '', content: '', scheduled_at: new Date(defaultDateTime(day)).toISOString(), status: 'planned', destination_id: state.destinations.find((item) => item.is_default)?.id || state.destinations[0]?.id || '' };
   const approvalLabels = { draft: 'Черновик', pending: 'Отправлено на согласование', approved: 'Согласовано', needs_changes: 'Нужно изменить' };
+  const subtopics = state.subtopics.filter((item) => item.destination_id === value.destination_id);
   state.modal = { type: 'editor', id: post?.id || null };
   showModal(`<div class="modal-head"><div><h2>${isNew ? 'Новая публикация' : 'Публикация'}</h2><small>${formatLongDate(value.scheduled_at)}</small></div><button class="icon-button close" aria-label="Закрыть">×</button></div>
     <form class="modal-body" id="post-form">
       <div class="field"><label for="title">Название</label><input id="title" name="title" value="${escapeHtml(value.title)}" required maxlength="160" autofocus placeholder="О чём публикация?"></div>
       <div class="field"><label for="scheduled_at">Дата и время</label><input id="scheduled_at" name="scheduled_at" type="datetime-local" value="${localInputValue(value.scheduled_at)}" required></div>
       <div class="field"><label for="destination_id">Проект или чат</label><select id="destination_id" name="destination_id" required>${state.destinations.map((item) => `<option value="${item.id}" ${item.id === value.destination_id ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}</select></div>
+      <div class="field"><label for="subtopic_id">Подтема</label><select id="subtopic_id" name="subtopic_id"><option value="">Без подтемы</option>${subtopics.map((item) => `<option value="${item.id}" ${item.id === value.subtopic_id ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}</select><small class="field-hint">Добавить свои подтемы можно в настройках.</small></div>
       <div class="field"><label for="content">Текст и заметки</label><textarea id="content" name="content" placeholder="Текст публикации, идея или ссылка…">${escapeHtml(value.content || '')}</textarea></div>
       ${isNew ? '' : `<div class="approval-state ${value.approval_status || 'draft'}" id="approval-state">${approvalLabels[value.approval_status] || approvalLabels.draft}</div>`}
       <label class="toggle-row"><span><strong>Уже опубликовано</strong><small>Напоминания больше не придут</small></span><span class="switch"><input name="published" type="checkbox" ${value.status === 'published' ? 'checked' : ''}><span></span></span></label>
@@ -278,6 +283,7 @@ function openEditor(post = null, day = new Date()) {
   document.querySelector('.modal')?.classList.add('editor-modal');
   const form = document.querySelector('#post-form');
   form.onsubmit = async (event) => { event.preventDefault(); await savePost(form, post?.id, true); };
+  form.destination_id.onchange = () => updateSubtopicOptions(form, form.subtopic_id.value);
   if (!isNew) {
     form.oninput = () => scheduleAutoSave(form, post.id);
     form.onchange = () => scheduleAutoSave(form, post.id, 100);
@@ -285,6 +291,11 @@ function openEditor(post = null, day = new Date()) {
     document.querySelector('#send-review').onclick = () => sendForReview(form, post.id);
   }
   setTimeout(() => document.querySelector('#title')?.focus(), 80);
+}
+
+function updateSubtopicOptions(form, selectedId = '') {
+  const options = state.subtopics.filter((item) => item.destination_id === form.destination_id.value);
+  form.subtopic_id.innerHTML = `<option value="">Без подтемы</option>${options.map((item) => `<option value="${item.id}" ${item.id === selectedId ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}`;
 }
 
 function scheduleAutoSave(form, id, delay = 650) {
@@ -306,6 +317,7 @@ async function savePost(form, id, closeAfter) {
     title: form.title.value.trim(),
     content: form.content.value.trim(),
     destination_id: form.destination_id.value || null,
+    subtopic_id: form.subtopic_id.value || null,
     scheduled_at: isoFromLocal(form.scheduled_at.value),
     status: form.published.checked ? 'published' : 'planned',
     published_at: form.published.checked ? new Date().toISOString() : null,
@@ -399,6 +411,10 @@ function renderSettings() {
         <div class="destination-list">${state.destinations.map((item) => `<div class="destination-item"><span>${escapeHtml(item.name)}${item.is_default ? '<small>Основной</small>' : ''}</span>${item.is_default ? '' : `<button class="icon-delete" type="button" data-delete-destination="${item.id}" aria-label="Удалить">×</button>`}</div>`).join('')}</div>
         <form class="destination-form" id="destination-form"><input name="name" maxlength="180" required placeholder="Название проекта, мероприятия или чата"><button class="button secondary" type="submit">Добавить</button></form>
       </section>
+      <section class="settings-section"><h3>Подтемы</h3><p>Добавьте свои рубрики для каждого проекта или чата.</p>
+        <div class="subtopic-list">${state.subtopics.map((item) => `<div class="destination-item"><span>${escapeHtml(item.name)}<small>${escapeHtml(state.destinations.find((destination) => destination.id === item.destination_id)?.name || 'Проект удалён')}</small></span><button class="icon-delete" type="button" data-delete-subtopic="${item.id}" aria-label="Удалить">×</button></div>`).join('') || '<div class="empty-inline">Подтем пока нет</div>'}</div>
+        <form class="subtopic-form" id="subtopic-form"><select name="destination_id" required>${state.destinations.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join('')}</select><input name="name" maxlength="120" required placeholder="Например: Новости проекта"><button class="button secondary" type="submit">Добавить подтему</button></form>
+      </section>
       <section class="settings-section"><h3>Доступ</h3><p>${escapeHtml(state.session.user.email)}</p><button class="button secondary" id="change-password">Сменить пароль</button> <button class="link-button" id="sign-out">Выйти</button></section>
     </div>`);
   document.querySelectorAll('[data-setting]').forEach((input) => input.onchange = () => updateSetting(input.dataset.setting, input.checked));
@@ -407,8 +423,34 @@ function renderSettings() {
   document.querySelector('#disconnect-telegram')?.addEventListener('click', disconnectTelegram);
   document.querySelector('#destination-form').onsubmit = addDestination;
   document.querySelectorAll('[data-delete-destination]').forEach((button) => button.onclick = () => deleteDestination(button.dataset.deleteDestination));
+  document.querySelector('#subtopic-form').onsubmit = addSubtopic;
+  document.querySelectorAll('[data-delete-subtopic]').forEach((button) => button.onclick = () => deleteSubtopic(button.dataset.deleteSubtopic));
   document.querySelector('#change-password').onclick = openPasswordChange;
   document.querySelector('#sign-out').onclick = async () => { closeModal(); await supabase.auth.signOut(); };
+}
+
+async function addSubtopic(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const name = form.name.value.trim();
+  const destinationId = form.destination_id.value;
+  if (!name || !destinationId) return;
+  const { data, error } = await supabase.from('content_subtopics').insert({ user_id: state.session.user.id, destination_id: destinationId, name }).select().single();
+  if (error) return toast(error.code === '23505' ? 'Такая подтема уже есть у этого проекта' : humanError(error), 'error');
+  state.subtopics.push(data);
+  closeModal();
+  renderSettings();
+  toast('Подтема добавлена');
+}
+
+async function deleteSubtopic(id) {
+  if (!confirm('Удалить эту подтему? Публикации сохранятся.')) return;
+  const { error } = await supabase.from('content_subtopics').delete().eq('id', id);
+  if (error) return toast(humanError(error), 'error');
+  state.subtopics = state.subtopics.filter((item) => item.id !== id);
+  closeModal();
+  renderSettings();
+  toast('Подтема удалена');
 }
 
 async function addDestination(event) {
