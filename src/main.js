@@ -200,6 +200,7 @@ function openEditor(post = null, day = new Date()) {
       <div class="autosave" id="autosave">${isNew ? '' : 'Все изменения сохраняются автоматически'}</div>
       <div class="actions">${isNew ? '' : '<button class="button danger" type="button" id="delete-post">Удалить</button>'}<button class="button secondary close" type="button">Закрыть</button>${isNew ? '<button class="button primary" type="submit">Добавить</button>' : ''}</div>
     </form>`);
+  document.querySelector('.modal')?.classList.add('editor-modal');
   const form = document.querySelector('#post-form');
   form.onsubmit = async (event) => { event.preventDefault(); await savePost(form, post?.id, true); };
   if (!isNew) {
