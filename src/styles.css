@@ -110,6 +110,7 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .auth-card h2 { margin: 0 0 8px; font-size: 27px; }
 .auth-card > p { color: var(--muted); line-height: 1.5; }
 .auth-card .button { width: 100%; margin-top: 8px; }
+.forgot-password { display: block; margin: 14px auto 0; }
 .auth-switch { margin: 18px 0 0; text-align: center; color: var(--muted); font-size: 14px; }
 .link-button { border: 0; padding: 4px; color: var(--green); background: transparent; font-weight: 750; cursor: pointer; }
 .setup-card { width: min(700px, 100%); }

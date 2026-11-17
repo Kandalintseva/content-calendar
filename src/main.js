@@ -48,9 +48,11 @@ function renderAuth(signUp = false) {
     <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required placeholder="name@example.com"></div>
     <div class="field"><label for="password">Пароль</label><input id="password" name="password" type="password" autocomplete="${signUp ? 'new-password' : 'current-password'}" minlength="8" required placeholder="Не менее 8 символов"></div>
     <button class="button primary" type="submit">${signUp ? 'Создать доступ' : 'Войти'}</button>
+    ${signUp ? '' : '<button class="link-button forgot-password" type="button" id="forgot-password">Забыли пароль?</button>'}
     <p class="auth-switch">${signUp ? 'Уже создавали доступ?' : 'Первый вход?'} <button class="link-button" type="button" id="auth-switch">${signUp ? 'Войти' : 'Создать доступ'}</button></p>
   </form></main>`;
   document.querySelector('#auth-switch').onclick = () => renderAuth(!signUp);
+  document.querySelector('#forgot-password')?.addEventListener('click', requestPasswordReset);
   document.querySelector('#auth-form').onsubmit = async (event) => {
     event.preventDefault();
     const button = event.currentTarget.querySelector('button[type="submit"]');
@@ -63,6 +65,43 @@ function renderAuth(signUp = false) {
     button.disabled = false;
     if (result.error) return toast(humanError(result.error), 'error');
     if (signUp && !result.data.session) toast('Проверьте почту и подтвердите адрес');
+  };
+}
+
+async function requestPasswordReset() {
+  const emailInput = document.querySelector('#email');
+  const email = emailInput?.value.trim();
+  if (!email || !emailInput.reportValidity()) return;
+  const button = document.querySelector('#forgot-password');
+  button.disabled = true;
+  const redirectTo = `${window.location.origin}${window.location.pathname}`;
+  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+  button.disabled = false;
+  if (error) return toast(humanError(error), 'error');
+  toast('Письмо для смены пароля отправлено');
+}
+
+function renderPasswordRecovery() {
+  app.innerHTML = `<main class="auth-page"><form class="auth-card" id="recovery-form">
+    <div class="brand"><div class="brand-mark">◫</div><div><h1>Публикации</h1><p>Спокойный контент-план</p></div></div>
+    <h2>Новый пароль</h2>
+    <p>Придумайте новый пароль для входа в календарь.</p>
+    <div class="field"><label for="new-password">Новый пароль</label><input id="new-password" name="password" type="password" autocomplete="new-password" minlength="8" required placeholder="Не менее 8 символов" autofocus></div>
+    <div class="field"><label for="confirm-password">Повторите пароль</label><input id="confirm-password" name="confirmation" type="password" autocomplete="new-password" minlength="8" required></div>
+    <button class="button primary" type="submit">Сохранить новый пароль</button>
+  </form></main>`;
+  document.querySelector('#recovery-form').onsubmit = async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (form.password.value !== form.confirmation.value) return toast('Пароли не совпадают', 'error');
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+    const { error } = await supabase.auth.updateUser({ password: form.password.value });
+    button.disabled = false;
+    if (error) return toast(humanError(error), 'error');
+    window.history.replaceState({}, '', window.location.pathname);
+    toast('Новый пароль сохранён');
+    await loadData();
   };
 }
 
@@ -325,9 +364,10 @@ async function boot() {
   if (!isConfigured()) return renderSetup();
   const { data } = await supabase.auth.getSession();
   state.session = data.session;
-  supabase.auth.onAuthStateChange((_event, session) => {
+  supabase.auth.onAuthStateChange((event, session) => {
     state.session = session;
-    if (!session) renderAuth();
+    if (event === 'PASSWORD_RECOVERY') renderPasswordRecovery();
+    else if (!session) renderAuth();
     else loadData();
   });
   if (!state.session) renderAuth();
