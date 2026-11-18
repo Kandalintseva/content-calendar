@@ -35,14 +35,14 @@ Deno.serve(async (req) => {
   const admin = adminClient();
   const [{ data: settings }, { data: post, error }] = await Promise.all([
     admin.from('notification_settings').select('telegram_chat_id,telegram_connected').eq('user_id', user.id).single(),
-    admin.from('posts').select('id,title,content,scheduled_at,destination_id,sticker_id,content_destinations(name),telegram_stickers(file_id,emoji)').eq('id', postId).eq('user_id', user.id).single(),
+    admin.from('posts').select('id,title,content,scheduled_at,destination_id,telegram_thread,sticker_id,content_destinations(name),telegram_stickers(file_id,emoji)').eq('id', postId).eq('user_id', user.id).single(),
   ]);
   if (error || !post) return json({ error: 'Публикация не найдена' }, 404);
   if (!settings?.telegram_connected || !settings.telegram_chat_id) return json({ error: 'Сначала подключите Telegram в настройках' }, 409);
 
   const title = hasEmoji(post.title) ? post.title : `${emojiFor(post.title)} ${post.title}`;
   const destination = (post.content_destinations as { name?: string } | null)?.name || 'Чат не выбран';
-  const text = `📝 Пост на согласование\n\n${title}\n\n${post.content || 'Текст пока не добавлен'}\n\n📍 ${destination}\n🕒 ${moscowDate.format(new Date(post.scheduled_at))} (МСК)`;
+  const text = `📝 Пост на согласование\n\n${title}\n\n${post.content || 'Текст пока не добавлен'}\n\n📍 ${destination}${post.telegram_thread ? `\n🧵 Ветка: ${post.telegram_thread}` : ''}\n🕒 ${moscowDate.format(new Date(post.scheduled_at))} (МСК)`;
   try {
     const message = await sendTelegram(settings.telegram_chat_id, text, {
       inline_keyboard: [

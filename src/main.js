@@ -235,12 +235,16 @@ function renderWeek(grouped, today) {
 }
 
 function renderWeekPost(post) {
-  return `<button class="post-card week-post ${postStatus(post)} approval-${approvalStatus(post)}" data-id="${post.id}" type="button"><span class="post-time">${formatTime(post.scheduled_at)}</span><span class="post-title">${escapeHtml(post.title)}${postSubtopic(post)}<small class="post-stage">${approvalLabel(post)}</small></span><span class="post-status">${postStatus(post) === 'published' ? '✓' : postStatus(post) === 'overdue' ? '!' : '•'}</span></button>`;
+  return `<button class="post-card week-post ${postStatus(post)} approval-${approvalStatus(post)}" data-id="${post.id}" type="button"><span class="post-time">${formatTime(post.scheduled_at)}</span><span class="post-title">${escapeHtml(post.title)}${postSubtopic(post)}${postThread(post)}<small class="post-stage">${approvalLabel(post)}</small></span><span class="post-status">${postStatus(post) === 'published' ? '✓' : postStatus(post) === 'overdue' ? '!' : '•'}</span></button>`;
 }
 
 function postSubtopic(post) {
   const topic = state.subtopics.find((item) => item.id === post.subtopic_id);
   return topic ? `<small class="post-subtopic">${escapeHtml(topic.name)}</small>` : '';
+}
+
+function postThread(post) {
+  return post.telegram_thread ? `<small class="post-thread">🧵 ${escapeHtml(post.telegram_thread)}</small>` : '';
 }
 
 function renderDay(day, posts, today) {
@@ -250,7 +254,7 @@ function renderDay(day, posts, today) {
     <span class="day-number">${day.getDate()}</span>
     <span class="posts">${posts.slice(0, 3).map((post) => `<span class="post-card ${postStatus(post)} approval-${approvalStatus(post)}" data-id="${post.id}">
       <span class="post-time">${formatTime(post.scheduled_at)}</span>
-      <span class="post-title">${escapeHtml(post.title)}${postSubtopic(post)}<small class="post-stage">${approvalLabel(post)}</small></span>
+      <span class="post-title">${escapeHtml(post.title)}${postSubtopic(post)}${postThread(post)}<small class="post-stage">${approvalLabel(post)}</small></span>
       <span class="post-status" aria-label="${postStatus(post) === 'published' ? 'Опубликовано' : postStatus(post) === 'overdue' ? 'Просрочено' : 'Запланировано'}">${postStatus(post) === 'published' ? '✓' : postStatus(post) === 'overdue' ? '!' : '•'}</span>
     </span>`).join('')}${posts.length > 3 ? `<span class="more">ещё ${posts.length - 3}</span>` : ''}</span>
     ${posts.length ? `<span class="day-hover-preview">${posts.map((post) => `<span>${formatTime(post.scheduled_at)} · ${escapeHtml(post.title)}</span>`).join('')}</span>` : ''}
@@ -329,7 +333,7 @@ function changeView(view) {
 
 function openEditor(post = null, day = new Date()) {
   const isNew = !post;
-  const value = post || { title: '', content: '', scheduled_at: new Date(defaultDateTime(day)).toISOString(), status: 'planned', destination_id: state.destinations.find((item) => item.is_default)?.id || state.destinations[0]?.id || '' };
+  const value = post || { title: '', content: '', scheduled_at: new Date(defaultDateTime(day)).toISOString(), status: 'planned', destination_id: state.destinations.find((item) => item.is_default)?.id || state.destinations[0]?.id || '', telegram_thread: '' };
   const approvalLabels = { draft: 'Черновик', pending: 'Отправлено на согласование', approved: 'Согласовано', needs_changes: 'Нужно изменить' };
   const platformApproval = isNew ? '' : `<button class="button ${value.approval_status === 'approved' ? 'secondary' : 'approve'}" type="button" id="platform-approval">${value.approval_status === 'approved' ? 'Вернуть на доработку' : 'Согласовать на платформе'}</button>`;
   const subtopics = state.subtopics.filter((item) => item.destination_id === value.destination_id);
@@ -339,6 +343,7 @@ function openEditor(post = null, day = new Date()) {
       <div class="field"><label for="title">Название</label><input id="title" name="title" value="${escapeHtml(value.title)}" required maxlength="160" autofocus placeholder="О чём публикация?"></div>
       <div class="field"><label for="scheduled_at">Дата и время</label><input id="scheduled_at" name="scheduled_at" type="datetime-local" value="${localInputValue(value.scheduled_at)}" required></div>
       <div class="field"><label for="destination_id">Проект или чат</label><select id="destination_id" name="destination_id" required>${state.destinations.map((item) => `<option value="${item.id}" ${item.id === value.destination_id ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}</select></div>
+      <div class="field"><label for="telegram_thread">Ветка в Telegram</label><input id="telegram_thread" name="telegram_thread" value="${escapeHtml(value.telegram_thread || '')}" maxlength="120" placeholder="Например: Объявления или 8 класс"><small class="field-hint">Если в чате есть темы, укажите нужную ветку.</small></div>
       <div class="field"><label for="subtopic_id">Подтема</label><select id="subtopic_id" name="subtopic_id"><option value="">Без подтемы</option>${subtopics.map((item) => `<option value="${item.id}" ${item.id === value.subtopic_id ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}</select><small class="field-hint">Добавить свои подтемы можно в настройках.</small></div>
       <div class="field"><label for="sticker_id">Стикер для Telegram</label><select id="sticker_id" name="sticker_id"><option value="">Без стикера</option>${state.stickers.map((item) => `<option value="${item.id}" ${item.id === value.sticker_id ? 'selected' : ''}>${escapeHtml(item.emoji || '🎨')} ${escapeHtml(item.set_name || 'Мой стикер')}</option>`).join('')}</select><small class="field-hint">Отправьте стикер вашему боту, чтобы он появился здесь.</small></div>
       <div class="field"><label for="content">Текст и заметки</label><textarea id="content" name="content" placeholder="Текст публикации, идея или ссылка…">${escapeHtml(value.content || '')}</textarea></div>
@@ -406,6 +411,7 @@ async function savePost(form, id, closeAfter) {
     title: form.title.value.trim(),
     content: form.content.value.trim(),
     destination_id: form.destination_id.value || null,
+    telegram_thread: form.telegram_thread.value.trim() || null,
     subtopic_id: form.subtopic_id.value || null,
     sticker_id: form.sticker_id.value || null,
     scheduled_at: isoFromLocal(form.scheduled_at.value),

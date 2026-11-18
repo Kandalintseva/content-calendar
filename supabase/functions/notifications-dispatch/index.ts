@@ -12,7 +12,7 @@ type Settings = {
   daily_digest_enabled: boolean;
   overdue_enabled: boolean;
 };
-type Post = { id: string; user_id: string; title: string; content: string; scheduled_at: string; approval_status: string; content_destinations?: { name?: string } | null; telegram_stickers?: { file_id?: string } | null };
+type Post = { id: string; user_id: string; title: string; content: string; scheduled_at: string; telegram_thread?: string | null; approval_status: string; content_destinations?: { name?: string } | null; telegram_stickers?: { file_id?: string } | null };
 type Kind = 'hour_before' | 'quarter_before' | 'daily_digest' | 'overdue' | 'scheduled_post';
 
 const admin = adminClient();
@@ -43,7 +43,7 @@ async function deliver(settings: Settings, kind: Kind, dedupeKey: string, text: 
 }
 
 async function postsBetween(userId: string, start: Date | string, end: Date | string, plannedOnly = false) {
-  let query = admin.from('posts').select('id,user_id,title,content,scheduled_at,approval_status,content_destinations(name),telegram_stickers(file_id)').eq('user_id', userId)
+  let query = admin.from('posts').select('id,user_id,title,content,scheduled_at,telegram_thread,approval_status,content_destinations(name),telegram_stickers(file_id)').eq('user_id', userId)
     .gte('scheduled_at', typeof start === 'string' ? start : start.toISOString())
     .lte('scheduled_at', typeof end === 'string' ? end : end.toISOString()).order('scheduled_at');
   if (plannedOnly) query = query.eq('status', 'planned');
@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
       const readyPosts = await postsBetween(settings.user_id, due.start, due.end, true);
       for (const post of readyPosts.filter((item) => item.approval_status === 'approved')) {
         const destination = post.content_destinations?.name || 'Чат не выбран';
-        const text = `📨 Пора публиковать\n\n${post.title}\n\n${post.content || ''}\n\n📍 ${destination}\n\nСкопируйте или перешлите это сообщение в нужный чат.`;
+        const text = `📨 Пора публиковать\n\n${post.title}\n\n${post.content || ''}\n\n📍 ${destination}${post.telegram_thread ? `\n🧵 Ветка: ${post.telegram_thread}` : ''}\n\nСкопируйте или перешлите это сообщение в нужный чат.`;
         const delivery = await deliver(settings, 'scheduled_post', `scheduled:${post.id}`, text, post.id);
         track(delivery);
         if (delivery === 'sent' && post.telegram_stickers?.file_id) await sendSticker(settings.telegram_chat_id, post.telegram_stickers.file_id);
