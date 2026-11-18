@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatMoscowDateKey, hourReminderBounds, isDailyDigestWindow, moscowDayBounds, overdueBounds, scheduledPostBounds } from './schedule.ts';
+import { formatMoscowDateKey, hourReminderBounds, isDailyDigestWindow, moscowDayBounds, overdueBounds, quarterReminderBounds, scheduledPostBounds } from './schedule.ts';
 
 describe('server notification schedule', () => {
   it('recognizes the 09:00 Moscow digest window', () => {
@@ -20,6 +20,8 @@ describe('server notification schedule', () => {
     expect(hourReminderBounds(now).start.toISOString()).toBe('2026-11-17T10:55:00.000Z');
     expect(hourReminderBounds(now).end.toISOString()).toBe('2026-11-17T11:05:00.000Z');
     expect(overdueBounds(now).end.toISOString()).toBe('2026-11-17T09:50:00.000Z');
+    expect(quarterReminderBounds(now).start.toISOString()).toBe('2026-11-17T10:10:00.000Z');
+    expect(quarterReminderBounds(now).end.toISOString()).toBe('2026-11-17T10:20:00.000Z');
   });
 
   it('finds posts due in the current scheduler window', () => {

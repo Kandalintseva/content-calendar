@@ -42,6 +42,13 @@ export function hourReminderBounds(date: Date) {
   };
 }
 
+export function quarterReminderBounds(date: Date) {
+  return {
+    start: new Date(date.getTime() + 10 * 60_000),
+    end: new Date(date.getTime() + 20 * 60_000),
+  };
+}
+
 export function overdueBounds(date: Date) {
   return {
     start: new Date(date.getTime() - 7 * 86_400_000),

@@ -2,17 +2,18 @@ import { adminClient } from '../_shared/supabase.ts';
 import { json } from '../_shared/http.ts';
 import { sendSticker, sendTelegram } from '../_shared/telegram.ts';
 import { sendPostAttachments } from '../_shared/attachments.ts';
-import { formatMoscowDateKey, hourReminderBounds, isDailyDigestWindow, moscowDayBounds, overdueBounds, scheduledPostBounds } from '../_shared/schedule.ts';
+import { formatMoscowDateKey, hourReminderBounds, isDailyDigestWindow, moscowDayBounds, overdueBounds, quarterReminderBounds, scheduledPostBounds } from '../_shared/schedule.ts';
 
 type Settings = {
   user_id: string;
   telegram_chat_id: string;
   reminder_hour_enabled: boolean;
+  reminder_quarter_enabled: boolean;
   daily_digest_enabled: boolean;
   overdue_enabled: boolean;
 };
 type Post = { id: string; user_id: string; title: string; content: string; scheduled_at: string; approval_status: string; content_destinations?: { name?: string } | null; telegram_stickers?: { file_id?: string } | null };
-type Kind = 'hour_before' | 'daily_digest' | 'overdue' | 'scheduled_post';
+type Kind = 'hour_before' | 'quarter_before' | 'daily_digest' | 'overdue' | 'scheduled_post';
 
 const admin = adminClient();
 const moscowTime = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' });
@@ -58,7 +59,7 @@ Deno.serve(async (req) => {
 
   const now = new Date();
   const { data, error } = await admin.from('notification_settings').select(
-    'user_id,telegram_chat_id,reminder_hour_enabled,daily_digest_enabled,overdue_enabled',
+    'user_id,telegram_chat_id,reminder_hour_enabled,reminder_quarter_enabled,daily_digest_enabled,overdue_enabled',
   ).eq('telegram_connected', true).not('telegram_chat_id', 'is', null);
   if (error) return json({ error: 'Could not load settings' }, 500, false);
 
@@ -72,6 +73,14 @@ Deno.serve(async (req) => {
         const posts = await postsBetween(settings.user_id, bounds.start, bounds.end, true);
         for (const post of posts) {
           track(await deliver(settings, 'hour_before', `hour:${post.id}`, `⏰ Через час публикация\n\n${post.title}\nВремя: ${moscowTime.format(new Date(post.scheduled_at))}`, post.id));
+        }
+      }
+
+      if (settings.reminder_quarter_enabled) {
+        const bounds = quarterReminderBounds(now);
+        const posts = await postsBetween(settings.user_id, bounds.start, bounds.end, true);
+        for (const post of posts) {
+          track(await deliver(settings, 'quarter_before', `quarter:${post.id}`, `🔔 Через 15 минут публикация\n\n${post.title}\nВремя: ${moscowTime.format(new Date(post.scheduled_at))}`, post.id));
         }
       }
 

@@ -504,6 +504,7 @@ function renderSettings() {
       </section>
       <section class="settings-section"><h3>Уведомления</h3>
         ${toggle('reminder_hour_enabled', 'За час до публикации', 'Чтобы успеть всё проверить', s.reminder_hour_enabled)}
+        ${toggle('reminder_quarter_enabled', 'За 15 минут до публикации', 'Короткое напоминание перед отправкой', s.reminder_quarter_enabled)}
         ${toggle('daily_digest_enabled', 'План на сегодня в 09:00', 'Короткая утренняя сводка', s.daily_digest_enabled)}
         ${toggle('overdue_enabled', 'Если публикация пропущена', 'Напомним один раз после назначенного времени', s.overdue_enabled)}
       </section>
