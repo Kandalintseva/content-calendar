@@ -14,6 +14,9 @@ verify_jwt = true
 [functions.telegram-review]
 verify_jwt = true
 
+[functions.telegram-day-review]
+verify_jwt = true
+
 [functions.telegram-disconnect]
 verify_jwt = true
 
