@@ -213,6 +213,7 @@ function renderApp() {
     if (event.target.closest('.post-card')) return;
     openEditor(null, new Date(`${el.dataset.date}T${String(el.dataset.hour).padStart(2, '0')}:00:00`));
   });
+  document.querySelectorAll('[data-week-day]').forEach((el) => el.onclick = () => openDayOverview(el.dataset.weekDay));
   document.querySelectorAll('.post-card').forEach((el) => el.onclick = (event) => {
     event.stopPropagation();
     openEditor(state.posts.find((post) => post.id === el.dataset.id));
@@ -225,7 +226,7 @@ function renderWeek(grouped, today) {
   const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
   return `<div class="week-scroll"><div class="week-schedule">
     <div class="week-corner">Время</div>
-    ${days.map((day, index) => `<div class="week-day-head ${dateKey(day) === today ? 'today' : ''}"><span>${dayNames[index]}</span><strong>${day.getDate()}</strong></div>`).join('')}
+    ${days.map((day, index) => `<button type="button" class="week-day-head ${dateKey(day) === today ? 'today' : ''}" data-week-day="${dateKey(day)}" title="Открыть все публикации за день"><span>${dayNames[index]}</span><strong>${day.getDate()}</strong></button>`).join('')}
     ${hours.map((hour) => `<div class="week-hour">${String(hour).padStart(2, '0')}:00</div>${days.map((day) => {
       const posts = (grouped.get(dateKey(day)) || []).filter((post) => new Date(post.scheduled_at).getHours() === hour);
       return `<div class="week-slot ${dateKey(day) === today ? 'today' : ''}" data-date="${dateKey(day)}" data-hour="${hour}" role="button" tabindex="0" aria-label="Добавить публикацию ${day.toLocaleDateString('ru-RU')} в ${hour}:00">${posts.map(renderWeekPost).join('')}</div>`;
@@ -318,6 +319,7 @@ function openEditor(post = null, day = new Date()) {
   const isNew = !post;
   const value = post || { title: '', content: '', scheduled_at: new Date(defaultDateTime(day)).toISOString(), status: 'planned', destination_id: state.destinations.find((item) => item.is_default)?.id || state.destinations[0]?.id || '' };
   const approvalLabels = { draft: 'Черновик', pending: 'Отправлено на согласование', approved: 'Согласовано', needs_changes: 'Нужно изменить' };
+  const platformApproval = isNew ? '' : `<button class="button ${value.approval_status === 'approved' ? 'secondary' : 'approve'}" type="button" id="platform-approval">${value.approval_status === 'approved' ? 'Вернуть на доработку' : 'Согласовать на платформе'}</button>`;
   const subtopics = state.subtopics.filter((item) => item.destination_id === value.destination_id);
   state.modal = { type: 'editor', id: post?.id || null };
   showModal(`<div class="modal-head"><div><h2>${isNew ? 'Новая публикация' : 'Публикация'}</h2><small>${formatLongDate(value.scheduled_at)}</small></div><button class="icon-button close" aria-label="Закрыть">×</button></div>
@@ -332,7 +334,7 @@ function openEditor(post = null, day = new Date()) {
       ${isNew ? '' : `<div class="approval-state ${value.approval_status || 'draft'}" id="approval-state">${approvalLabels[value.approval_status] || approvalLabels.draft}</div>`}
       <label class="toggle-row"><span><strong>Уже опубликовано</strong><small>Напоминания больше не придут</small></span><span class="switch"><input name="published" type="checkbox" ${value.status === 'published' ? 'checked' : ''}><span></span></span></label>
       <div class="autosave" id="autosave">${isNew ? '' : 'Все изменения сохраняются автоматически'}</div>
-      <div class="actions">${isNew ? '' : '<button class="button danger" type="button" id="delete-post">Удалить</button><button class="button telegram" type="button" id="send-review">Отправить на согласование</button>'}<button class="button secondary close" type="button">Закрыть</button>${isNew ? '<button class="button primary" type="submit">Добавить</button>' : ''}</div>
+      <div class="actions">${isNew ? '' : '<button class="button danger" type="button" id="delete-post">Удалить</button><button class="button telegram" type="button" id="send-review">Отправить в Telegram</button>'}${platformApproval}<button class="button secondary close" type="button">Закрыть</button>${isNew ? '<button class="button primary" type="submit">Добавить</button>' : ''}</div>
     </form>`);
   document.querySelector('.modal')?.classList.add('editor-modal');
   const form = document.querySelector('#post-form');
@@ -343,9 +345,24 @@ function openEditor(post = null, day = new Date()) {
     form.onchange = () => scheduleAutoSave(form, post.id, 100);
     document.querySelector('#delete-post').onclick = () => deletePost(post.id);
     document.querySelector('#send-review').onclick = () => sendForReview(form, post.id);
+    document.querySelector('#platform-approval').onclick = () => setPlatformApproval(post.id, value.approval_status !== 'approved');
     document.querySelectorAll('[data-delete-attachment]').forEach((button) => button.onclick = () => deleteAttachment(button.dataset.deleteAttachment));
   }
   setTimeout(() => document.querySelector('#title')?.focus(), 80);
+}
+
+async function setPlatformApproval(id, approved) {
+  clearTimeout(state.saveTimer);
+  const { error } = await supabase.from('posts').update({ approval_status: approved ? 'approved' : 'needs_changes', approved_at: approved ? new Date().toISOString() : null }).eq('id', id);
+  if (error) return toast(humanError(error), 'error');
+  const post = state.posts.find((item) => item.id === id);
+  if (post) { post.approval_status = approved ? 'approved' : 'needs_changes'; post.approved_at = approved ? new Date().toISOString() : null; }
+  const stateEl = document.querySelector('#approval-state');
+  if (stateEl) { stateEl.className = `approval-state ${approved ? 'approved' : 'needs_changes'}`; stateEl.textContent = approved ? 'Согласовано' : 'Нужно изменить'; }
+  const button = document.querySelector('#platform-approval');
+  if (button) { button.textContent = approved ? 'Вернуть на доработку' : 'Согласовать на платформе'; button.className = `button ${approved ? 'secondary' : 'approve'}`; button.onclick = () => setPlatformApproval(id, !approved); }
+  renderApp();
+  toast(approved ? 'Публикация согласована' : 'Публикация возвращена на доработку');
 }
 
 function renderAttachmentList(postId) {

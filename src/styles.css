@@ -47,6 +47,7 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .button.secondary { background: #edf0ec; color: var(--ink); }
 .button.danger { background: #f8e4e1; color: var(--red); }
 .button.telegram { background: #e4f2f7; color: #176b88; }
+.button.approve { background: #dcebe6; color: var(--green); }
 .button:disabled { opacity: .55; cursor: wait; }
 .weekdays, .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .calendar-grid { grid-template-rows: repeat(6, minmax(125px, auto)); }
@@ -100,8 +101,8 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .status-dot.needs_changes { background: var(--red); }
 
 .week-scroll { width: 100%; overflow: auto; overscroll-behavior: contain; }
-.week-schedule { min-width: 980px; display: grid; grid-template-columns: 70px repeat(7, minmax(130px, 1fr)); background: white; }
-.week-corner, .week-day-head { position: sticky; top: 0; z-index: 4; min-height: 72px; display: grid; place-items: center; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: #faf9f4; }
+.week-schedule { min-width: 1160px; display: grid; grid-template-columns: 70px repeat(7, minmax(155px, 1fr)); background: white; }
+.week-corner, .week-day-head { position: sticky; top: 0; z-index: 4; min-height: 72px; display: grid; place-items: center; border: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: #faf9f4; cursor: pointer; }
 .week-corner { left: 0; z-index: 6; color: var(--muted); font-size: 11px; font-weight: 750; text-transform: uppercase; }
 .week-day-head { gap: 2px; align-content: center; color: var(--muted); }
 .week-day-head span { font-size: 11px; font-weight: 750; text-transform: uppercase; }
